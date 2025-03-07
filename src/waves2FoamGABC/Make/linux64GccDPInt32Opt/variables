@@ -1,0 +1,2 @@
+shapeFuncs=shapeFunctions
+LIB = $(WAVES_LIBBIN)/libwaves2FoamGABC

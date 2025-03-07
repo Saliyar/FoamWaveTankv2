@@ -1,0 +1,3 @@
+[submodule "ThirdParty/Grid2Grid"]
+	path = ThirdParty/Grid2Grid
+	url = https://github.com/LHEEA/Grid2Grid.git

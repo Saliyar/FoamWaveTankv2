@@ -1,0 +1,3 @@
+#!/bin/bash
+rm -rf Grid2Grid
+rm -f $WAVES_LIBBIN/libGrid2Grid.so
