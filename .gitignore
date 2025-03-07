@@ -1,0 +1,11 @@
+# Ignore compiled files
+Make/linux*
+Make/darwin*
+Make/.*
+
+# Ignore OpenFOAM-specific temporary files
+*.dep
+*.log
+*.o
+*.so
+**/constant/modes_HOS_SWENSE.dat

@@ -1,0 +1,15 @@
+waveProp=preProcessing/setWaveProperties
+current=current
+solitary=solitary
+regular=regular
+irregular=irregular
+dws=waveSpectra
+freq=frequencyAxis
+spectra=spectra
+phases=phases
+mixedType=mixedType
+external=externalWaveForcing
+gabc=gabcSettings
+prep=preProcessing/probes
+pointd=pointDistributions
+LIB = $(WAVES_LIBBIN)/libwaves2FoamProcessing

@@ -1,0 +1,52 @@
+#!/bin/bash
+
+## Modified script to check and install Grid2Grid from GitHub if not found
+
+function Grid2GridInstall()
+{
+    # Exit immediately if there is an error
+    # set -e
+    
+    # Set the directory for Grid2Grid installation
+    SRCDIR="Grid2Grid/"
+    LIBRARY="$FOAM_USER_LIBBIN/libGrid2Grid.so"
+    REPO_URL="https://github.com/LHEEA/Grid2Grid.git"
+
+    # Check if libGrid2Grid.so exists in $FOAM_USER_LIBBIN
+    if [ -f "${LIBRARY}" ]; then
+        echo "libGrid2Grid.so is already present in \$FOAM_USER_LIBBIN."
+        echo "Skipping the build process."
+        return 0
+    fi
+
+    # Check for the 'Grid2Grid' folder
+    if [ ! -d "${SRCDIR}" ] || [ -z "$(ls -A "${SRCDIR}")" ]; then
+        echo "Grid2Grid folder not found or empty. Cloning from GitHub..."
+        git clone "${REPO_URL}" "${SRCDIR}"
+    fi
+
+    echo "Grid2Grid folder is found and populated."
+    
+    # Check if the required GCC version is available
+    GCCREQUIRE="4.9"
+    CHECKGCC=$(printf '%s\n' "${GCCREQUIRE}" "`gcc -dumpversion`" | sort -V | head -n1)
+
+    if [ ! "${CHECKGCC}" = "$GCCREQUIRE" ]; then
+        echo "Grid2Grid: Requires GCC v4.9+ ... cannot compile"
+        return 0
+    fi
+
+    # Build process
+    pushd "${SRCDIR}" || return
+    echo "Building Grid2Grid..."
+    cmake -S. -Bbuild -DBUILD_OF_LIB=ON
+    cmake --build build
+
+    # Move postG2G to the build directory
+    mv postG2G build/.
+    
+    # Return to the previous directory
+    popd
+}
+
+Grid2GridInstall
