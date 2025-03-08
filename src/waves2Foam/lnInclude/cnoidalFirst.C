@@ -1,1 +1,0 @@
-../waveTheories/regular/cnoidalFirst/cnoidalFirst.C

@@ -1,1 +1,0 @@
-../preProcessing/setWaveProperties/irregular/waveSpectra/frequencyAxis/frequencyAxis.C

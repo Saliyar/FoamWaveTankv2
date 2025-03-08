@@ -1,5 +1,0 @@
-SOURCE = \
-surfaceElevation/sampledSurfaceElevation.C \
-overtopping/overtopping.C \
-
-# sources

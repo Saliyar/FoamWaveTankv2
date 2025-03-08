@@ -1,1 +1,0 @@
-../preProcessing/setWaveProperties/irregular/waveSpectra/spectra/JONSWAP/JONSWAP.C

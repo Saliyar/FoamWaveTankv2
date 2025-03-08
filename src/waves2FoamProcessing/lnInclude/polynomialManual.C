@@ -1,1 +1,0 @@
-../preProcessing/setWaveProperties/gabcSettings/polynomialManual/polynomialManual.C

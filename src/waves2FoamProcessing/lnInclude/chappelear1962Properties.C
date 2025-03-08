@@ -1,1 +1,0 @@
-../preProcessing/setWaveProperties/solitary/chappelear1962Properties/chappelear1962Properties.C

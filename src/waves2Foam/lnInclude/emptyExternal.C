@@ -1,1 +1,0 @@
-../waveTheories/externalWaveForcing/emptyExternal/emptyExternal.C

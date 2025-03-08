@@ -1,1 +1,0 @@
-../waveTheories/regular/stokesSecondModulation/stokesSecondModulation.C

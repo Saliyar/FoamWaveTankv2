@@ -1,1 +1,0 @@
-../relaxationZone/relaxationWeight/freePolynomial/relaxationWeightFreePolynomial.C

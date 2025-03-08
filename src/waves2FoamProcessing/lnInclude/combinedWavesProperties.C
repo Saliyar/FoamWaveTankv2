@@ -1,1 +1,0 @@
-../preProcessing/setWaveProperties/mixedType/combinedWavesProperties/combinedWavesProperties.C

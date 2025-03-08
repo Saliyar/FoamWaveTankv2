@@ -1,1 +1,0 @@
-../convexPolyhedral/localCellNeg.C

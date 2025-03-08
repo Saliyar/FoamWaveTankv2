@@ -1,1 +1,0 @@
-../preProcessing/setWaveProperties/regular/cnoidalFirstProperties/cnoidalFirstProperties.C

@@ -1,1 +1,0 @@
-../waveTheories/irregular/irregular/irregular.H
