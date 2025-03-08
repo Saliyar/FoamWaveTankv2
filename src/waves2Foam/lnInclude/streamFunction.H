@@ -1,1 +1,0 @@
-../waveTheories/regular/streamFunction/streamFunction.H

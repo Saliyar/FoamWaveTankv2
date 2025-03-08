@@ -1,1 +1,0 @@
-../waveTheories/irregular/bichromaticFirst/bichromaticFirst.C

@@ -1,1 +1,0 @@
-../preProcessing/setWaveProperties/gabcSettings/rationalDefault/rationalDefault.H

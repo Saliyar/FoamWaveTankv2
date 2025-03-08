@@ -1,1 +1,0 @@
-../waveTheories/regular/stokesFirstStanding/stokesFirstStanding.H

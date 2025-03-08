@@ -1,1 +1,0 @@
-../preProcessing/setWaveProperties/regular/stokesSecondModulationProperties/stokesSecondModulationProperties.C

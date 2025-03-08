@@ -1,1 +1,0 @@
-../postProcessing/postProcessingWaves/spectralAnalysis/leastSquareBasedMethods/powerSpectraLS/powerSpectraLS.H

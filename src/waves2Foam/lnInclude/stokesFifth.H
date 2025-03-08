@@ -1,1 +1,0 @@
-../waveTheories/regular/stokesFifth/stokesFifth.H

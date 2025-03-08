@@ -1,1 +1,0 @@
-../preProcessing/setWaveProperties/mixedType/writeManualIHFoam/writeManualIHFoamProperties.C

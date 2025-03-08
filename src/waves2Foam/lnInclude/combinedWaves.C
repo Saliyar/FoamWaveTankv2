@@ -1,1 +1,0 @@
-../waveTheories/mixedType/combinedWaves/combinedWaves.C
