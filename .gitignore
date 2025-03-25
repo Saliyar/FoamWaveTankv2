@@ -2,6 +2,8 @@
 Make/linux*
 Make/darwin*
 Make/.*
+**/linux64GccDPInt32Opt/
+**/lnInclude/
 
 # Ignore OpenFOAM-specific temporary files
 *.dep

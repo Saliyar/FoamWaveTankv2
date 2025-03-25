@@ -200,6 +200,7 @@ void Grid2Grid::getGrid2GridPosition
 
 void Grid2Grid::step()
 {
+    scalar beforeTime = rT_.elapsedCpuTime();
     // Get OpenFOAM Simulation Time
     double timeGri2Grid( mesh_.time().value() );
 
@@ -211,6 +212,9 @@ void Grid2Grid::step()
         &indexGrid2Grid_,
         &timeGri2Grid
     );
+
+    Info << "External step: " << rT_.elapsedCpuTime() - beforeTime << " s."
+	     << endl;
 }
 
 void Grid2Grid::close()
