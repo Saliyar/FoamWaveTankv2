@@ -50,17 +50,7 @@ Additional information
 
 #include "argList.H"
 
-#if EXTBRANCH==1
-    #if 310<OFVERSION
-        #include "foamTime.H"
-    #else
-        #include "Time.H"
-    #endif
-#elif OFPLUSBRANCH==1
-    #include "Time.H"
-#else
-    #include "Time.H"
-#endif
+#include "Time.H"
 
 //#if EXTBRANCH==1 && OFVERSION>310
 //    #include "foamTime.H"
