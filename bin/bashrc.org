@@ -48,7 +48,7 @@ export WM_PROJECT_VERSION_NUMBER=$version
 ## Easy navigation
 export WAVES_SRC=$WAVES_DIR/src
 export WAVES_TUT=$WAVES_DIR/tutorials
-export WAVES_SOL=$WAVES_DIR/applications/solvers/solvers$WM_PROJECT_VERSION_NUMBER
+export WAVES_SOL=$WAVES_DIR/applications/solvers
 export WAVES_UTIL=$WAVES_DIR/applications/utilities
 export WAVES_PRE=$WAVES_UTIL/preProcessing
 export WAVES_POST=$WAVES_UTIL/postProcessing

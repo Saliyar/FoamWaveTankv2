@@ -77,12 +77,14 @@ echo ""
 echo "====================================="
 echo "    COMPILE SOLVERS"
 echo "====================================="
-solvers=`ls -d $WAVES_SOL/*`
+solvers=`ls -d $WAVES_SOL/wave*`
 
 # Loop over the solver names
 for s in $solvers
 do
-    solverName=`basename $s`
+    echo "Full path:$s"
+     solverName=`basename $s`
+     echo "Compiling solver: $solverName"
 
     # Correct options file if extend branch or not
     if [ "$EXTBRANCH" -eq "1" ]
