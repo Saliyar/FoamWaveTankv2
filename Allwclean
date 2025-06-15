@@ -26,7 +26,12 @@ echo "====================================="
 echo "    CLEAN SOLVERS"
 echo "====================================="
 
-(cd $WAVES_DIR/applications/solvers; wclean all)
+for dir in "$WAVES_DIR/applications/solvers"/wave*; do
+  if [ -d "$dir" ]; then
+    echo "Cleaning solver: $(basename "$dir")"
+    (cd "$dir" && wclean all)
+  fi
+done
 
 
 ## UTILITIES
@@ -35,8 +40,7 @@ echo "====================================="
 echo "    CLEAN UTILITIES"
 echo "====================================="
 
-(cd $WAVES_DIR/applications/utilities; wclean all)
-
+(cd "$WAVES_DIR/applications/utilities/"; wclean all)
 
 echo ""
 echo "====================================="

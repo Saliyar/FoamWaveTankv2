@@ -56,21 +56,24 @@ fi
 # for OpenFOAM-4.0
 if [ $FOAMEXTENDPROJECT -eq "1" ]
 then
-    (cd waves2FoamSampling  ; wmake libso)
+    (cd waves2FoamSampling ; wmake libso)
 elif [ $OFPLUSBRANCH -eq "1" ]
 then
     if [ "$WM_PROJECT_VERSION_NUMBER" -lt "1706" ]
     then
-        (cd waves2FoamSampling  ; wmake libso)
+        (cd waves2FoamSampling ; wmake libso)
     elif [ "$WM_PROJECT_VERSION_NUMBER" -lt "2206" ]
     then
-        (cd waves2FoamSampling1712  ; wmake libso)
+        (cd waves2FoamSampling1712 ; wmake libso)
+    elif [ "$WM_PROJECT_VERSION_NUMBER" -lt "2412" ]
+    then
+        (cd waves2FoamSampling2206 ; wmake libso)
     else
-        (cd waves2FoamSampling2206  ; wmake libso)
+        (cd waves2FoamSampling2412 ; wmake libso)
     fi
 else
     if [ "$WM_PROJECT_VERSION_NUMBER" -lt "400" ]
     then
-        (cd waves2FoamSampling  ; wmake libso)
+        (cd waves2FoamSampling ; wmake libso)
     fi
 fi
