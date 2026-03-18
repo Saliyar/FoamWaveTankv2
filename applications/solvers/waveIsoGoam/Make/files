@@ -1,3 +1,0 @@
-waveIsoGoam.C
-
-EXE = $(WAVES_APPBIN)/waveIsoGoam
