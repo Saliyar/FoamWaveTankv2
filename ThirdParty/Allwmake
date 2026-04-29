@@ -53,3 +53,23 @@ function Grid2GridInstall()
 }
 
 Grid2GridInstall
+
+echo "====================================="
+echo "    COMPILE FENTON4FOAM"
+echo "====================================="
+
+fentonName="fenton4Foam"
+
+if [ ! -f "$WAVES_APPBIN/$fentonName" ]
+then
+    echo
+    echo "Compiling fenton4Foam"
+    echo
+    cd $fentonName
+    gfortran -o $WAVES_APPBIN/$fentonName $fentonName.f fft.f
+    cd $OLDPWD
+else
+    echo
+    echo "fenton4Foam has already been compiled"
+    echo
+fi
