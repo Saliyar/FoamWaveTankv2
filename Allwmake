@@ -52,6 +52,11 @@ then
     mkdir -p $WAVES_LIBBIN
 fi
 
+## Ensure git submodules are initialized
+if [ -f ".gitmodules" ]; then
+    echo "Initializing git submodules..."
+    git submodule update --init --recursive
+fi
 
 ## COMPILE THIRD PARTY DEPENDENCIES
 (cd ThirdParty; ./Allwmake -j)
