@@ -1,0 +1,81 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  1.5                                   |
+|   \\  /    A nd           | Web:      http://www.OpenFOAM.org               |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      environmentalProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+seaLevel	0.00;
+
+// A list of the relaxation zones in the simulation. The parameters are given
+// in <name>Coeffs below.
+relaxationNames (inlet outlet);
+
+// Name to use for initialisation
+initializationName inlet;
+
+// External forcing definition
+waveType DepthvaryingCurrent;
+    U               (0 0 0);   // deep current  
+    UF              (1.0 0 0);   // surface current
+    ZC              -5.0;        // transition depth
+    Tsoft           5;
+    localSeaLevel   0.0;
+
+
+inletCoeffs
+{
+    waveType DepthvaryingCurrent;
+    profileType    constant;
+    U               (0.5 0 0);   // deep current
+    UF              (0.5 0 0);   // surface current
+    ZC              -5.0;        // transition depth
+    Tsoft           5;
+    localSeaLevel   0.0;
+    
+    relaxationZone
+    {
+        relaxationScheme Spatial;
+        relaxationShape  Rectangular;
+    
+        relaxType   INLET;
+        startX      (-10.11 0 -5);
+        endX        (-2 0 2);
+        orientation      (1.0 0.0 0.0);
+    }
+};
+
+outletCoeffs
+{
+    waveType DepthvaryingCurrent;
+    profileType    constant;
+    U               (0.5 0 0);   // deep current
+    UF              (0.5 0 0);   // surface current
+    ZC              -5.0;        // transition depth
+    Tsoft           5;
+    localSeaLevel   0.0;
+
+    relaxationZone
+    {
+        relaxationScheme Spatial;
+        relaxationShape  Rectangular;
+
+        relaxType   OUTLET;
+        startX      (2 0 -5);
+        endX        (10.11 0 2);
+        orientation      (1.0 0.0 0.0);
+    }
+};
+
+
+
+// ************************************************************************* //
