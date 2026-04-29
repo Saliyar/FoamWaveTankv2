@@ -25,10 +25,10 @@ License
 \*---------------------------------------------------------------------------*/
 
 
+
 #include "DepthvaryingCurrent.H"
 #include "addToRunTimeSelectionTable.H"
-
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+#include "mathematicalConstants.H"
 
 namespace Foam
 {
@@ -38,8 +38,8 @@ namespace waveTheories
 defineTypeNameAndDebug(DepthvaryingCurrent, 0);
 addToRunTimeSelectionTable(waveTheory, DepthvaryingCurrent, dictionary);
 
-// * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * * //
 
+// Constructors
 DepthvaryingCurrent::DepthvaryingCurrent
 (
     const word& subDictName,
@@ -54,35 +54,59 @@ DepthvaryingCurrent::DepthvaryingCurrent
     localSeaLevel_
     (
         coeffDict_.lookupOrDefault<scalar>("localSeaLevel", seaLevel_)
+    ),
+    profileType_(coeffDict_.lookup("profileType")),
+    H_(coeffDict_.lookupOrDefault<scalar>("H", mag(ZC_))),
+    z0_(coeffDict_.lookupOrDefault<scalar>
+        (
+            "z0",
+            0.5*(localSeaLevel_ + ZC_)
+        )
     )
-{}
+{
+    // ---- Validate profileType immediately -----------------
+
+    if
+    (
+        profileType_ != "constant"
+     && profileType_ != "depthVarying"
+     && profileType_ != "parabolic"
+    )
+    {
+        FatalIOErrorInFunction(coeffDict_)
+            << "Invalid profileType \"" << profileType_ << "\"" << nl
+            << "Valid profileType options are:" << nl
+            << "  - constant" << nl
+            << "  - depthVarying" << nl
+            << "  - parabolic" << nl
+            << exit(FatalIOError);
+    }
+}
 
 
-// * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
-
+// Print coefficients
 void DepthvaryingCurrent::printCoeffs()
 {
-    Info << "Loading wave theory: " << typeName << nl
-         << "  Deep current U        = " << U_ << nl
-         << "  Surface current UF   = " << UF_ << nl
-         << "  Transition depth ZC  = " << ZC_ << nl
-         << "  Soft start Tsoft     = " << Tsoft_ << endl;
+    Info<< "Loading current model: " << typeName << nl
+        << "  Profile type        : " << profileType_ << nl
+        << "  Deep current U      : " << U_ << nl
+        << "  Surface current UF : " << UF_ << nl
+        << "  Transition depth ZC: " << ZC_ << nl
+        << "  Soft-start Tsoft   : " << Tsoft_ << nl << endl;
 }
 
 
+// Soft start
 scalar DepthvaryingCurrent::factor(const scalar& time) const
 {
-    scalar f(1.0);
+    if (Tsoft_ <= 0.0) return 1.0;
 
-    if (Tsoft_ > 0.0)
-    {
-        f = sin(PI_/2.0 * min(Tsoft_, time) / Tsoft_);
-    }
-
-    return f;
+    return sin(constant::mathematical::pi/2.0
+         * min(time, Tsoft_) / Tsoft_);
 }
 
 
+// Free surface
 scalar DepthvaryingCurrent::eta
 (
     const point&,
@@ -93,6 +117,7 @@ scalar DepthvaryingCurrent::eta
 }
 
 
+// Excess pressure
 scalar DepthvaryingCurrent::pExcess
 (
     const point&,
@@ -103,39 +128,65 @@ scalar DepthvaryingCurrent::pExcess
 }
 
 
+// Velocity profile (CRITICAL FUNCTION)
 vector DepthvaryingCurrent::U
 (
     const point& x,
     const scalar& time
 ) const
 {
-    scalar z = x.z();
-    vector UC;
+    const scalar z = x.z();
+    vector UC(Zero);
 
-    if (z < ZC_)
+    // ---------------- CONSTANT CURRENT ----------------
+    if (profileType_ == "constant")
     {
-        UC = UF_;
+        UC = U_;
     }
+
+    // ---------------- DEPTH-VARYING (CORRECTED) --------
+    else if (profileType_ == "depthVarying")
+    {
+        if (z <= ZC_)
+        {
+            UC = U_;
+        }
+        else
+        {
+            scalar w = (z - ZC_)/(localSeaLevel_ - ZC_);
+            w = max(min(w, 1.0), 0.0);
+
+            UC = (1.0 - w)*U_ + w*UF_;
+        }
+    }
+
+    // ---------------- PARABOLIC PROFILE ----------------
+    else if (profileType_ == "parabolic")
+    {
+        scalar eta = (z - z0_)/H_;
+        scalar Ux  = mag(UF_)*(1.0 - eta*eta);
+
+        UC = vector(max(Ux, 0.0), 0, 0);
+    }
+
     else
     {
-        UC =
-            (UF_ - U_) / (-ZC_) * z
-          + UF_;
+        FatalErrorInFunction
+            << "Unknown profileType: " << profileType_ << nl
+            << "Valid types are: constant | depthVarying | parabolic"
+            << exit(FatalError);
     }
 
     return UC * factor(time);
 }
+
 
 Switch DepthvaryingCurrent::conflictTSoftInitialise() const
 {
     return false;
 }
 
-
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-
 } // End namespace waveTheories
 } // End namespace Foam
 
-// ************************************************************************* //
 

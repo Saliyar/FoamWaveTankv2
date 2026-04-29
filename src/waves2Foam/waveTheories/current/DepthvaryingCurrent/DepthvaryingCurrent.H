@@ -53,76 +53,99 @@ Author
 
 \*---------------------------------------------------------------------------*/
 
+
 #ifndef DepthvaryingCurrent_H
 #define DepthvaryingCurrent_H
 
 #include "waveTheory.H"
 
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-
 namespace Foam
 {
 namespace waveTheories
 {
-/*---------------------------------------------------------------------------*\
-                           Class DepthvaryingCurrent Declaration
-\*---------------------------------------------------------------------------*/
 
 class DepthvaryingCurrent
-: 
+:
     public waveTheory
 {
-    //- Deep current velocity
-    vector U_;
+    // Private data
 
-    //- Surface current velocity
-    vector UF_;
+        //- Deep current velocity (below ZC)
+        vector U_;
 
-    //- Transition depth
-    scalar ZC_;
+        //- Surface current velocity
+        vector UF_;
 
-    //- Soft start time
-    scalar Tsoft_;
+        //- Transition depth (negative)
+        scalar ZC_;
 
-    //- Local sea level
-    scalar localSeaLevel_;
+        //- Soft-start time
+        scalar Tsoft_;
 
-    //- Ramp factor
-    scalar factor(const scalar& time) const;
+        //- Local still water level
+        scalar localSeaLevel_;
+
+        //- Current profile type
+        word profileType_;
+
+        //- Parabolic profile parameters
+        scalar H_;
+        scalar z0_;
+
 
 public:
+
+    //- Runtime type information
     TypeName("DepthvaryingCurrent");
 
-    DepthvaryingCurrent
-    (
-        const word& subDictName,
-        const fvMesh& mesh
-    );
+    // Constructors
 
-    virtual void printCoeffs();
+        DepthvaryingCurrent
+        (
+            const word& subDictName,
+            const fvMesh& mesh
+        );
 
-    virtual scalar eta
-    (
-        const point& x,
-        const scalar& time
-    ) const;
 
-    virtual vector U
-    (
-        const point& x,
-        const scalar& time
-    ) const;
+    //- Destructor
+    virtual ~DepthvaryingCurrent() = default;
 
-    virtual scalar pExcess
-    (
-        const point& x,
-        const scalar& time
-    ) const;
 
-    virtual Switch conflictTSoftInitialise() const;
+    // Member Functions
+
+        //- Print coefficients
+        virtual void printCoeffs();
+
+        //- Soft-start factor
+        scalar factor(const scalar& time) const;
+
+        //- Free-surface elevation
+        virtual scalar eta
+        (
+            const point& x,
+            const scalar& time
+        ) const;
+
+        //- Excess pressure
+        virtual scalar pExcess
+        (
+            const point& x,
+            const scalar& time
+        ) const;
+
+        //- Velocity field (USED BY RELAXATION ZONES)
+        virtual vector U
+        (
+            const point& x,
+            const scalar& time
+        ) const;
+
+        //- TSoft conflict
+        virtual Switch conflictTSoftInitialise() const;
 };
 
-} // namespace waveTheories
-} // namespace Foam
+} // End namespace waveTheories
+} // End namespace Foam
 
 #endif
+
