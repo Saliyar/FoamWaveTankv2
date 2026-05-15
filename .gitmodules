@@ -1,3 +1,6 @@
 [submodule "ThirdParty/Grid2Grid"]
 	path = ThirdParty/Grid2Grid
 	url = https://github.com/LHEEA/Grid2Grid.git
+[submodule "ThirdParty/FloatStepper"]
+	path = ThirdParty/FloatStepper
+	url = https://github.com/FloatStepper/FloatStepper
