@@ -57,6 +57,7 @@ $(waveTheories)/$(extWF)/externalWaveForcing.C
 $(waveTheories)/$(extWF)/emptyExternal/emptyExternal.C
 $(waveTheories)/$(extWF)/irregularFast/irregularFast.C
 $(waveTheories)/$(extWF)/Grid2Grid/Grid2Grid.C
+$(waveTheories)/$(extWF)/Grid2GridWithCurrent/Grid2GridWithCurrent.C
 
 /* WAVE BOUNDARY CONDITIONS */ 
 fvPatchFields=fvPatchFields

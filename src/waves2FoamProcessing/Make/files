@@ -60,6 +60,7 @@ $(waveProp)/$(mixedType)/writeManualIHFoam/writeManualIHFoamProperties.C
 external=externalWaveForcing
 $(waveProp)/$(external)/externalSourceProperties/externalSourceProperties.C
 $(waveProp)/$(external)/Grid2GridProperties/Grid2GridProperties.C
+$(waveProp)/$(external)/Grid2GridWithCurrentProperties/Grid2GridWithCurrentProperties.C
 
 /* GABC settings */
 gabc=gabcSettings

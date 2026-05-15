@@ -1,0 +1,80 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2412                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version	2.0;
+    format	ascii;
+    class	dictionary;
+    object	waveProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+seaLevel            0;
+
+relaxationNames     ( inlet outlet );
+
+initializationName  inlet;
+
+externalForcing     Grid2GridWithCurrent;
+
+Grid2GridCoeffs
+{
+    waveType            Grid2GridWithCurrent;
+
+    Tsoft               0;
+
+    referenceTime       0;
+
+    referencePosition   (-16.95 -14.84 0);
+
+    referenceTheta      0;
+
+    Grid2GridInputFileName Grid2Grid.dict;
+
+    profileType         depthVarying;
+    Uc                  ( 0 0 0 );
+    UF                  ( 0.25 0 0 );
+    ZC                  -5;
+    currentTsoft        10;
+    H                   5;
+    z0                  -2;
+}
+
+inletCoeffs
+{
+    waveType            externalSource;
+
+    relaxationZone
+    {
+        relaxationScheme    Spatial;
+        relaxationShape     Rectangular;
+        relaxType           INLET;
+        startX              ( -10.11 0 -5 );
+        endX                ( -2 0 2 );
+        orientation         ( 1 0 0 );
+    }
+}
+
+outletCoeffs
+{
+    waveType            externalSource;
+
+    relaxationZone
+    {
+        relaxationScheme    Spatial;
+        relaxationShape     Rectangular;
+        relaxType           OUTLET;
+        startX              ( 2 0 -5 );
+        endX                ( 10.11 0 2 );
+        orientation         ( 1 0 0 );
+    }
+}
+
+
+
+// ************************************************************************* //

@@ -1,0 +1,116 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM                                        |
+|  \\    /   O peration     |                                                 |
+|   \\  /    A nd           |                                                 |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      environmentalProperties;
+}
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+seaLevel    0.00;
+
+relaxationNames (inlet outlet);
+
+initializationName inlet;
+
+
+// =====================================================
+// ✅ MAIN FORCING (your custom model)
+// =====================================================
+externalForcing Grid2GridWithCurrent;
+
+
+// =====================================================
+// ✅ COEFFICIENTS (MUST be this name)
+// =====================================================
+Grid2GridCoeffs
+{
+    waveType Grid2GridWithCurrent;
+
+    // ----------------------------
+    // Wave (same as working case)
+    // ----------------------------
+    Tsoft 0;
+
+    referencePosition (-16.95 -14.84 0);
+    refDirection      (1 0 0);
+    referenceTime     0.0;
+    referenceTheta    0;
+
+    Grid2GridInputFileName Grid2Grid.dict;
+
+
+    // ----------------------------
+    // ✅ CURRENT (your model)
+    // ----------------------------
+    profileType depthVarying;   // constant | depthVarying | parabolic
+
+    Uc (0 0 0);               // deep current
+    UF (0.25 0 0);               // surface current
+    ZC -5;                      // transition depth
+
+    currentTsoft 10;            // ramp time
+
+    // Optional (only for parabolic)
+    H 5;
+    z0 -2;
+}
+
+
+// =====================================================
+// ✅ INLET (DO NOT ADD CURRENT HERE)
+// =====================================================
+inletCoeffs
+{
+    waveType externalSource;
+
+    Grid2GridInputFileName Grid2Grid.dict;
+
+    relaxationZone
+    {
+        relaxationScheme Spatial;
+        relaxationShape  Rectangular;
+
+        relaxType   INLET;
+
+        startX      (-10.11 0 -5);
+        endX        (-2 0 2);
+
+        orientation (1 0 0);
+    }
+}
+
+
+// =====================================================
+// ✅ OUTLET (DO NOT ADD CURRENT HERE)
+// =====================================================
+outletCoeffs
+{
+    waveType externalSource;
+
+    Grid2GridInputFileName Grid2Grid.dict;
+
+    relaxationZone
+    {
+        relaxationScheme Spatial;
+        relaxationShape  Rectangular;
+
+        relaxType   OUTLET;
+
+        startX      (2 0 -5);
+        endX        (10.11 0 2);
+
+        orientation (1 0 0);
+    }
+}
+
+// ************************************************************************* //
