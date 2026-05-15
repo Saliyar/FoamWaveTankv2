@@ -157,7 +157,7 @@ void Grid2Grid::mappingTensors( const scalar& thetaRadian )
     if ( abs( (g.z() + 1.0) ) > SMALL)
     {
         FatalErrorIn("void Grid2Grid::mappingTensors()")
-			<< "The gravitational vector should be given in negative z.  \n"
+			<< "The gravitational  vector should be given in negative z.  \n"
 			<< endl << exit(FatalError);
     }
 
