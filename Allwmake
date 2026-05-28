@@ -111,6 +111,26 @@ do
     ( cd $WAVES_SOL/$solverName; wmake )
 done
 
+## FLOAT STEPPER WITH WAVES
+# Compile floatStepperWaveFoam with integrated waves2Foam coupling
+echo ""
+echo "====================================="
+echo "    COMPILE FLOATSTEPPERWAVEFOAM"
+echo "====================================="
+if [ -d "applications/solvers/floatStepperWaveFoam" ]
+then
+    ( cd applications/solvers/floatStepperWaveFoam; ./Allwmake )
+    if [ $? -ne 0 ]
+    then
+        echo ""
+        echo "WARNING: floatStepperWaveFoam compilation failed"
+        echo "Continuing with utilities..."
+        echo ""
+    fi
+else
+    echo "WARNING: floatStepperWaveFoam directory not found"
+fi
+
 ## UTILITIES
 # Pre-processing utilities
 echo ""
