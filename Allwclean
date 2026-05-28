@@ -34,6 +34,24 @@ for dir in "$WAVES_DIR/applications/solvers"/wave*; do
 done
 
 
+## FLOAT STEPPER WITH WAVES
+echo ""
+echo "====================================="
+echo "    CLEAN FLOATSTEPPERWAVEFOAM"
+echo "====================================="
+
+if [ -d "applications/solvers/floatStepperWaveFoam" ]
+then
+    ( cd applications/solvers/floatStepperWaveFoam; ./Allwclean )
+    if [ $? -ne 0 ]
+    then
+        echo "WARNING: floatStepperWaveFoam cleaning had issues"
+    fi
+else
+    echo "WARNING: floatStepperWaveFoam directory not found"
+fi
+
+
 ## UTILITIES
 echo ""
 echo "====================================="
