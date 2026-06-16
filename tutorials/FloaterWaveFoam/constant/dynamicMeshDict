@@ -1,0 +1,80 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v1806                                 |
+|   \\  /    A nd           | Web:      www.OpenFOAM.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      dynamicMeshDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dynamicFvMesh   dynamicPointDisplacementFvMesh;
+
+solvers
+{
+    box
+    {
+        motionSolverLibs ( floaterMotion );
+
+        motionSolver    floaterMeshMotionSolver;
+
+        floaterMeshMotionSolverCoeffs
+        {
+            patches         (box);
+            innerDistance   0.075;
+            outerDistance   0.4;
+
+            separateMeshMorphing true;
+            xMorphing
+            {
+                // Coordinates specified relative to body or lab
+                relativeTo  body; //default: lab
+
+                innerBox { xMin -.5;  xMax  .5;}
+                outerBox { xMin -2;  xMax  2;}
+            }
+            zMorphing
+            {
+                $xMorphing;
+
+                innerBox { zMin -0.21; zMax  0.19; }
+                outerBox { zMin -0.39; zMax  0.39; }
+            }
+
+            linDirs   (1 0 1);
+            rotDirs   (0 1 0);
+            addedMassModel  pisoAddedMass;
+            MaddUpdateFreq  1;
+
+            restraints
+            {
+/*
+                moorDynR1
+                {
+                    floaterMotionRestraint moorDynR1;
+                }
+*/
+                moorDynR2_body
+                {
+                    floaterMotionRestraint  moorDynR2;
+                    couplingMode        "BODY";
+                    inputFile           "Mooring/lines_v2_bodyC.txt";
+                    vtkPrefix           "mdv2_body";
+                    writeMooringVTK     true;
+                    vtkStartTime        0;
+                    outerCorrector      1;
+                }
+
+            }
+        }
+    }
+}
+
+
+// ************************************************************************* //

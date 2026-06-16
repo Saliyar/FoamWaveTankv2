@@ -1,0 +1,93 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |
+| \\      /  F ield         | OpenFOAM: waves2Foam setup
+|  \\    /   O peration     |
+|   \\  /    A nd           |
+|    \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      environmentalProperties;
+}
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+seaLevel 0.0;
+
+// Relaxation zones
+relaxationNames (inlet outlet);
+
+// Initialize from inlet (important for startup)
+initializationName inlet;
+
+
+// =====================================================
+// INLET (Stokes wave generation)
+// =====================================================
+inletCoeffs
+{
+    waveType    stokesFirst;
+
+    // smooth ramping
+    Tsoft       3;
+
+    // water depth
+    depth       0.5;
+
+    // wave properties
+    period      2.0;
+    phi         0.0;
+    height      0.12;
+
+    // wave direction
+    direction   (1 0 0);
+
+    relaxationZone
+    {
+        relaxationScheme Spatial;
+        relaxationShape  Rectangular;
+        beachType        Empty;
+
+        relaxType   INLET;
+
+        // VERY IMPORTANT → matches your domain
+        startX      (-2.5 0 -0.5);
+        endX        (-1.5 0  0.5);
+
+        orientation (1 0 0);
+    }
+};
+
+
+// =====================================================
+// OUTLET (wave absorption)
+// =====================================================
+outletCoeffs
+{
+    waveType    potentialCurrent;
+
+    U           (0 0 0);
+    Tsoft       3;
+
+    relaxationZone
+    {
+        relaxationScheme Spatial;
+        relaxationShape  Rectangular;
+        beachType        Empty;
+
+        relaxType   OUTLET;
+
+        // Outlet zone
+        startX      (1.5 0 -0.5);
+        endX        (2.5 0  0.5);
+
+        orientation (1 0 0);
+    }
+};
+
+
+// ************************************************************************* //
