@@ -75,6 +75,11 @@ echo "====================================="
 echo "    COMPILE LIBRARY"
 echo "====================================="
 ( cd src; ./Allwmake -j)
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "ERROR: src build failed"
+    exit 1
+fi
 
 ## SOLVERS
 # Find all solver names in $WAVES_SOL
@@ -119,12 +124,12 @@ echo "    COMPILE FLOATSTEPPERWAVEFOAM"
 echo "====================================="
 if [ -d "applications/solvers/floatStepperWaveFoam" ]
 then
+    # Build ThirdParty (MoorDyn) and wrapper - includes all src/ and applications/
     ( cd applications/solvers/floatStepperWaveFoam; ./Allwmake )
     if [ $? -ne 0 ]
     then
         echo ""
-        echo "WARNING: floatStepperWaveFoam compilation failed"
-        echo "Continuing with utilities..."
+        echo "WARNING: floatStepperWaveFoam compilation had issues"
         echo ""
     fi
 else
