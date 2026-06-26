@@ -65,3 +65,6 @@ echo "====================================="
 echo "    CLEAN DONE"
 echo "====================================="
 echo ""
+
+# Remove build log
+[ -f log.build ] && rm log.build && echo "Removed log.build"

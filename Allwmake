@@ -1,4 +1,8 @@
-#!/bin/bash 
+#!/bin/bash
+
+# Log build output to log.build
+exec 1> >(tee log.build)
+exec 2>&1
 
 ## Making sure that prepareCase.sh is executable
 if [ ! -x "bin/prepareCase.sh" ]
