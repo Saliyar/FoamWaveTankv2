@@ -36,7 +36,9 @@ function Grid2GridInstall()
         return 0
     fi
 
-  sed -i 's|set(FFTW3_LIB_PATH  .*|set(FFTW3_LIB_PATH  /appl9/fftw/3.3.10/XeonE5-2660v3/gcc-13.3.0/lib)|' Grid2Grid/Grid2GridOptions.cmake
+  # Use FFTW3_LIB_PATH from environment (set by bashrc), or fall back to default
+  FFTW_PATH=${FFTW3_LIB_PATH:-/usr/lib64}
+  sed -i "s|set(FFTW3_LIB_PATH  .*|set(FFTW3_LIB_PATH  $FFTW_PATH)|" Grid2Grid/Grid2GridOptions.cmake
 
     # Build process
     pushd "${SRCDIR}" || return
