@@ -116,7 +116,7 @@ Grid2GridWithCurrent::Grid2GridWithCurrent
     Foam::Grid2Grid::__modgrid2grid_MOD_initializegrid2griddict
     (
         filePath,
-        &indexGrid2Grid_
+        (int*)&indexGrid2Grid_
     );
 
     Info << "Grid2GridWithCurrent initialized (wave + current)" << endl;
@@ -256,7 +256,7 @@ void Grid2GridWithCurrent::step()
 
     Foam::Grid2Grid::__modgrid2grid_MOD_correctgrid2grid
     (
-        &indexGrid2Grid_,
+        (int*)&indexGrid2Grid_,
         &time
     );
 }
@@ -277,7 +277,7 @@ scalar Grid2GridWithCurrent::eta
 
     Foam::Grid2Grid::__modgrid2grid_MOD_gethoseta
     (
-        &indexGrid2Grid_,
+        (int*)&indexGrid2Grid_,
         &X, &Y,
         &t,
         &etaG2G
@@ -307,7 +307,7 @@ scalar Grid2GridWithCurrent::pExcess
 
     Foam::Grid2Grid::__modgrid2grid_MOD_gethospd
     (
-        &indexGrid2Grid_,
+        (int*)&indexGrid2Grid_,
         &X, &Y, &Z,
         &t,
         &pd
@@ -338,7 +338,7 @@ vector Grid2GridWithCurrent::U
 
     Foam::Grid2Grid::__modgrid2grid_MOD_gethosu
     (
-        &indexGrid2Grid_,
+        (int*)&indexGrid2Grid_,
         &X, &Y, &Z,
         &t,
         &Ux, &Uy, &Uz
