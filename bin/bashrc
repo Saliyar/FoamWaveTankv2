@@ -13,8 +13,9 @@ then
 fi
 
 ### USER DEFINED ENVIRONMENTAL VARIABLES
-# Set WAVES_DIR based on where Allwmake is located (you can adjust the path to your actual Allwmake location)
-export WAVES_DIR=/zhome/19/7/191420/OpenFOAM/sitali-v2412/FoamWaveTankv2 #<-----Update the path where you did git cloned
+# Auto-detect WAVES_DIR based on bashrc location (handles any clone path)
+BASHRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export WAVES_DIR="$(dirname "$BASHRC_DIR")"
 export WAVES_APPBIN=$FOAM_USER_APPBIN
 export WAVES_LIBBIN=$FOAM_USER_LIBBIN
 
