@@ -207,11 +207,14 @@ void Grid2Grid::step()
     Info << "Grid2Grid Time : " << timeGri2Grid << endl;
 
     // Update Grid2Grid
-    Foam::Grid2Grid::__modgrid2grid_MOD_correctgrid2grid
-    (
-        &indexGrid2Grid_,
-        &timeGri2Grid
-    );
+    #pragma omp critical(grid2grid_step)
+    {
+        Foam::Grid2Grid::__modgrid2grid_MOD_correctgrid2grid
+        (
+            (int*)&indexGrid2Grid_,
+            &timeGri2Grid
+        );
+    }
 
     Info << "External step: " << rT_.elapsedCpuTime() - beforeTime << " s."
 	     << endl;
@@ -239,14 +242,17 @@ scalar Grid2Grid::eta
     double Grid2GridEta;
 
     // Get Grid2Grid Eta
-    Foam::Grid2Grid::__modgrid2grid_MOD_gethoseta
-    (
-        &indexGrid2Grid_,
-        &Grid2GridX,
-        &Grid2GridY,
-        &Grid2GridTime,
-        &Grid2GridEta
-    );
+    #pragma omp critical(grid2grid_eta)
+    {
+        Foam::Grid2Grid::__modgrid2grid_MOD_gethoseta
+        (
+            (int*)&indexGrid2Grid_,
+            &Grid2GridX,
+            &Grid2GridY,
+            &Grid2GridTime,
+            &Grid2GridEta
+        );
+    }
 
     scalar eta(Grid2GridEta);
 
@@ -276,15 +282,18 @@ scalar Grid2Grid::pExcess
     double Grid2GridPd;
 
     // Get Grid2Grid Pd
-    Foam::Grid2Grid::__modgrid2grid_MOD_gethospd
-    (
-        &indexGrid2Grid_,
-        &Grid2GridX,
-        &Grid2GridY,
-        &Grid2GridZ,
-        &Grid2GridTime,
-        &Grid2GridPd
-    );
+    #pragma omp critical(grid2grid_pressure)
+    {
+        Foam::Grid2Grid::__modgrid2grid_MOD_gethospd
+        (
+            (int*)&indexGrid2Grid_,
+            &Grid2GridX,
+            &Grid2GridY,
+            &Grid2GridZ,
+            &Grid2GridTime,
+            &Grid2GridPd
+        );
+    }
 
     scalar pd( Grid2GridPd );
 
@@ -321,17 +330,20 @@ vector Grid2Grid::U
     double Grid2GridUx, Grid2GridUy, Grid2GridUz;
 
     // Evaluate the velocity in the given point
-    Foam::Grid2Grid::__modgrid2grid_MOD_gethosu
-    (
-        &indexGrid2Grid_,
-        &Grid2GridX,
-        &Grid2GridY,
-        &Grid2GridZ,
-        &Grid2GridTime,
-        &Grid2GridUx,
-        &Grid2GridUy,
-        &Grid2GridUz
-    );
+    #pragma omp critical(grid2grid_velocity)
+    {
+        Foam::Grid2Grid::__modgrid2grid_MOD_gethosu
+        (
+            (int*)&indexGrid2Grid_,
+            &Grid2GridX,
+            &Grid2GridY,
+            &Grid2GridZ,
+            &Grid2GridTime,
+            &Grid2GridUx,
+            &Grid2GridUy,
+            &Grid2GridUz
+        );
+    }
 
     // Map the solution of OF-format but still in rotated form
     vector U(vector::zero);

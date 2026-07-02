@@ -254,11 +254,14 @@ void Grid2GridWithCurrent::step()
 {
     double time = mesh_.time().value();
 
-    Foam::Grid2Grid::__modgrid2grid_MOD_correctgrid2grid
-    (
-        (int*)&indexGrid2Grid_,
-        &time
-    );
+    #pragma omp critical(grid2grid_step)
+    {
+        Foam::Grid2Grid::__modgrid2grid_MOD_correctgrid2grid
+        (
+            (int*)&indexGrid2Grid_,
+            &time
+        );
+    }
 }
 
 
@@ -275,13 +278,16 @@ scalar Grid2GridWithCurrent::eta
 
     double etaG2G;
 
-    Foam::Grid2Grid::__modgrid2grid_MOD_gethoseta
-    (
-        (int*)&indexGrid2Grid_,
-        &X, &Y,
-        &t,
-        &etaG2G
-    );
+    #pragma omp critical(grid2grid_eta)
+    {
+        Foam::Grid2Grid::__modgrid2grid_MOD_gethoseta
+        (
+            (int*)&indexGrid2Grid_,
+            &X, &Y,
+            &t,
+            &etaG2G
+        );
+    }
 
     scalar eta = etaG2G;
 
@@ -305,13 +311,16 @@ scalar Grid2GridWithCurrent::pExcess
 
     double pd;
 
-    Foam::Grid2Grid::__modgrid2grid_MOD_gethospd
-    (
-        (int*)&indexGrid2Grid_,
-        &X, &Y, &Z,
-        &t,
-        &pd
-    );
+    #pragma omp critical(grid2grid_pressure)
+    {
+        Foam::Grid2Grid::__modgrid2grid_MOD_gethospd
+        (
+            (int*)&indexGrid2Grid_,
+            &X, &Y, &Z,
+            &t,
+            &pd
+        );
+    }
 
     scalar p = pd;
 
@@ -336,13 +345,16 @@ vector Grid2GridWithCurrent::U
 
     double Ux, Uy, Uz;
 
-    Foam::Grid2Grid::__modgrid2grid_MOD_gethosu
-    (
-        (int*)&indexGrid2Grid_,
-        &X, &Y, &Z,
-        &t,
-        &Ux, &Uy, &Uz
-    );
+    #pragma omp critical(grid2grid_velocity)
+    {
+        Foam::Grid2Grid::__modgrid2grid_MOD_gethosu
+        (
+            (int*)&indexGrid2Grid_,
+            &X, &Y, &Z,
+            &t,
+            &Ux, &Uy, &Uz
+        );
+    }
 
     vector Uw(Ux, Uy, Uz);
 
