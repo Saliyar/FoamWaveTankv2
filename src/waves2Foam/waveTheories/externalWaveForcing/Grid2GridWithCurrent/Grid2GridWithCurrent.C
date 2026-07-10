@@ -252,7 +252,7 @@ void Grid2GridWithCurrent::mappingTensors(const scalar& theta)
 
 void Grid2GridWithCurrent::step()
 {
-    double time = mesh_.time().value();
+    double time = getGrid2GridTIme( mesh_.time().value() );
 
     #pragma omp critical(grid2grid_step)
     {
