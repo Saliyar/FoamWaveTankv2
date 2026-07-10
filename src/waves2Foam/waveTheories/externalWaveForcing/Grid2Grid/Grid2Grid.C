@@ -201,8 +201,8 @@ void Grid2Grid::getGrid2GridPosition
 void Grid2Grid::step()
 {
     scalar beforeTime = rT_.elapsedCpuTime();
-    // Get OpenFOAM Simulation Time
-    double timeGri2Grid( mesh_.time().value() );
+    // Get OpenFOAM Simulation Time with HOS offset
+    double timeGri2Grid( getGrid2GridTIme( mesh_.time().value() ) );
 
     Info << "Grid2Grid Time : " << timeGri2Grid << endl;
 

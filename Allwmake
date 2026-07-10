@@ -4,6 +4,12 @@
 exec 1> >(tee log.build)
 exec 2>&1
 
+# Timing
+BUILD_START=$(date +%s)
+echo "========================================="
+echo "Build started: $(date)"
+echo "========================================="
+
 ## Making sure that prepareCase.sh is executable
 if [ ! -x "bin/prepareCase.sh" ]
 then
@@ -63,7 +69,7 @@ if [ -f ".gitmodules" ]; then
 fi
 
 ## COMPILE THIRD PARTY DEPENDENCIES
-(cd ThirdParty; ./Allwmake -j)
+(cd ThirdParty; ./Allwmake -j 2)
 
 if [[ $? -ne 0 ]]
 then
@@ -78,7 +84,7 @@ fi
 echo "====================================="
 echo "    COMPILE LIBRARY"
 echo "====================================="
-( cd src; ./Allwmake -j)
+( cd src; ./Allwmake -j 2)
 if [ $? -ne 0 ]; then
     echo ""
     echo "ERROR: src build failed"
@@ -241,5 +247,17 @@ fi
 echo ""
 echo "====================================="
 echo "    COMPILATION DONE"
+echo "====================================="
+
+# Calculate and display total build time
+BUILD_END=$(date +%s)
+BUILD_TIME=$((BUILD_END - BUILD_START))
+BUILD_HOURS=$((BUILD_TIME / 3600))
+BUILD_MINS=$(((BUILD_TIME % 3600) / 60))
+BUILD_SECS=$((BUILD_TIME % 60))
+
+echo ""
+echo "Build finished: $(date)"
+echo "Total build time: ${BUILD_HOURS}h ${BUILD_MINS}m ${BUILD_SECS}s"
 echo "====================================="
 echo ""
