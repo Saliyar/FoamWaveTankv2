@@ -65,7 +65,7 @@ fi
 ## Ensure git submodules are initialized and updated to latest remote
 if [ -f ".gitmodules" ]; then
     echo "Updating git submodules to latest remote..."
-    git submodule update --init --recursive --remote
+    git submodule update --init --remote
 fi
 
 ## COMPILE THIRD PARTY DEPENDENCIES
