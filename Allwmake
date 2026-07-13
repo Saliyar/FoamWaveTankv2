@@ -62,10 +62,10 @@ then
     mkdir -p $WAVES_LIBBIN
 fi
 
-## Ensure git submodules are initialized
+## Ensure git submodules are initialized and updated to latest remote
 if [ -f ".gitmodules" ]; then
-    echo "Initializing git submodules..."
-    git submodule update --init --recursive
+    echo "Updating git submodules to latest remote..."
+    git submodule update --init --recursive --remote
 fi
 
 ## COMPILE THIRD PARTY DEPENDENCIES

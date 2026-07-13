@@ -1,6 +1,8 @@
 [submodule "ThirdParty/Grid2Grid"]
 	path = ThirdParty/Grid2Grid
 	url = https://github.com/LHEEA/Grid2Grid.git
+	branch = master
 [submodule "applications/solvers/floatStepperWaveFoam"]
 	path = applications/solvers/floatStepperWaveFoam
 	url = https://github.com/Saliyar/FloatStepper
+	branch = master
