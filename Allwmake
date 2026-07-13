@@ -64,6 +64,8 @@ fi
 
 ## Ensure git submodules are initialized and updated to latest remote
 if [ -f ".gitmodules" ]; then
+    echo "Syncing submodule configuration..."
+    git submodule sync --recursive
     echo "Updating git submodules to latest remote..."
     git submodule update --init --remote
 fi
