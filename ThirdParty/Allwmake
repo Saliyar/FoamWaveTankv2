@@ -40,9 +40,10 @@ function Grid2GridInstall()
   FFTW_PATH=${FFTW3_LIB_PATH:-/usr/lib64}
   sed -i "s|set(FFTW3_LIB_PATH  .*|set(FFTW3_LIB_PATH  $FFTW_PATH)|" Grid2Grid/Grid2GridOptions.cmake
 
-  # Patch CMakeLists.txt to accept both .so and .a libraries (both find_library calls)
+  # Patch CMakeLists.txt to accept both .so and .a libraries
   sed -i 's/find_library(FFTW_LIB_FLAG NAMES libfftw3.a/find_library(FFTW_LIB_FLAG NAMES libfftw3.so libfftw3.a/' Grid2Grid/CMakeLists.txt
   sed -i 's/find_library(LIBEXIST NAMES libfftw3.a/find_library(LIBEXIST NAMES libfftw3.so libfftw3.a/' Grid2Grid/CMakeLists.txt
+  sed -i 's|set(FFTW_LIB_FLAG \${FFTW3_LIB_PATH}/libfftw3.a )|set(FFTW_LIB_FLAG ${FFTW3_LIB_PATH}/libfftw3.so)|' Grid2Grid/CMakeLists.txt
 
     # Build process
     pushd "${SRCDIR}" || return
