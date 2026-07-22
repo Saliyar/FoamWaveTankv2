@@ -44,7 +44,7 @@ fi
 
 if [ $OFPLUSBRANCH -eq "1" ]
 then
-    if [ "$WM_PROJECT_VERSION_NUMBER" -gt "1806" ]
+    if [ "$WM_PROJECT_VERSION_NUMBER" -gt "1806" ] && [ "$WM_PROJECT_VERSION_NUMBER" -lt "2606" ]
     then
         (cd waves2FoamGABC; wmake libso)
     fi

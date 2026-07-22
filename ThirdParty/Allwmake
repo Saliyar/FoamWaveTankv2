@@ -6,7 +6,7 @@ function Grid2GridInstall()
 {
     # Exit immediately if there is an error
     # set -e
-    
+
     # Set the directory for Grid2Grid installation
     SRCDIR="Grid2Grid/"
     LIBRARY="$FOAM_USER_LIBBIN/libGrid2Grid.so"
@@ -26,7 +26,7 @@ function Grid2GridInstall()
     fi
 
     echo "Grid2Grid folder is found and populated."
-    
+
     # Check if the required GCC version is available
     GCCREQUIRE="4.9"
     CHECKGCC=$(printf '%s\n' "${GCCREQUIRE}" "`gcc -dumpversion`" | sort -V | head -n1)
@@ -36,20 +36,38 @@ function Grid2GridInstall()
         return 0
     fi
 
-  # Use FFTW3_LIB_PATH from environment (set by bashrc), or fall back to default
-  FFTW_PATH=${FFTW3_LIB_PATH:-/usr/lib64}
-  sed -i "s|set(FFTW3_LIB_PATH  .*|set(FFTW3_LIB_PATH  $FFTW_PATH)|" Grid2Grid/Grid2GridOptions.cmake
+    # CRITICAL: Check FFTW3_LIB_PATH is valid BEFORE building
+    if [ -z "$FFTW3_LIB_PATH" ] || [ ! -f "$FFTW3_LIB_PATH/libfftw3.a" ]; then
+        echo ""
+        echo "========== ERROR =========="
+        echo "libfftw3.a not found at: $FFTW3_LIB_PATH"
+        echo "Grid2Grid build STOPPED"
+        echo ""
+        echo "Available FFTW locations:"
+        ls -la /usr/lib64/libfftw3* 2>/dev/null || echo "  /usr/lib64: not found"
+        ls -la /usr/local/lib/libfftw3* 2>/dev/null || echo "  /usr/local/lib: not found"
+        if [ -n "$FFTWDIR" ]; then
+            echo "  FFTWDIR: $FFTWDIR"
+        fi
+        echo ""
+        echo "To fix: module load fftw3 OR set FFTW3_LIB_PATH correctly"
+        echo "=============================="
+        echo ""
+        return 1
+    fi
 
-  # Patch CMakeLists.txt to accept both .so and .a libraries
-  sed -i 's/find_library(FFTW_LIB_FLAG NAMES libfftw3.a/find_library(FFTW_LIB_FLAG NAMES libfftw3.so libfftw3.a/' Grid2Grid/CMakeLists.txt
-  sed -i 's/find_library(LIBEXIST NAMES libfftw3.a/find_library(LIBEXIST NAMES libfftw3.so libfftw3.a/' Grid2Grid/CMakeLists.txt
-  sed -i 's|set(FFTW_LIB_FLAG \${FFTW3_LIB_PATH}/libfftw3.a )|set(FFTW_LIB_FLAG ${FFTW3_LIB_PATH}/libfftw3.so)|' Grid2Grid/CMakeLists.txt
+    echo "FFTW3 library found at: $FFTW3_LIB_PATH/libfftw3.a"
 
     # Build process
     pushd "${SRCDIR}" || return
     echo "Building Grid2Grid..."
     echo "$(pwd)"
-    cmake -S. -Bbuild -DBUILD_OF_LIB=ON -DCMAKE_FIND_LIBRARY_SUFFIXES=".so;.a"
+
+    # Patch Grid2GridOptions.cmake to use correct FFTW path (override hardcoded developer path)
+    echo "Patching Grid2GridOptions.cmake with correct FFTW path..."
+    sed -i "s|set(FFTW3_LIB_PATH  .*|set(FFTW3_LIB_PATH  $FFTW3_LIB_PATH)|" Grid2GridOptions.cmake
+
+    cmake -S. -Bbuild -DBUILD_OF_LIB=ON -DCMAKE_FIND_LIBRARY_SUFFIXES=".so;.a" -DFFTW3_LIB_PATH="$FFTW3_LIB_PATH"
     cmake --build build
 
     # Move postG2G to the build directory
@@ -60,6 +78,34 @@ function Grid2GridInstall()
 }
 
 Grid2GridInstall
+GRID2GRID_BUILD_RESULT=$?
+
+# CRITICAL: Verify libGrid2Grid.so was actually created
+if [ $GRID2GRID_BUILD_RESULT -ne 0 ]; then
+    echo ""
+    echo "========== ERROR =========="
+    echo "Grid2Grid build failed (returned error code $GRID2GRID_BUILD_RESULT)"
+    echo "Compilation STOPPED"
+    echo "=============================="
+    echo ""
+    exit 1
+fi
+
+if [ ! -f "$FOAM_USER_LIBBIN/libGrid2Grid.so" ]; then
+    echo ""
+    echo "========== ERROR =========="
+    echo "libGrid2Grid.so NOT FOUND after build!"
+    echo "Expected location: $FOAM_USER_LIBBIN/libGrid2Grid.so"
+    echo "Compilation STOPPED"
+    echo ""
+    echo "Check build log for cmake/compilation errors above."
+    echo "=============================="
+    echo ""
+    exit 1
+fi
+
+echo "✓ libGrid2Grid.so successfully created at: $FOAM_USER_LIBBIN/libGrid2Grid.so"
+echo ""
 
 echo "====================================="
 echo "    COMPILE FENTON4FOAM"

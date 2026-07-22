@@ -4,6 +4,17 @@
 exec 1> >(tee log.build)
 exec 2>&1
 
+##############################################################################
+## USER CONFIGURATION - Override FFTW library location if needed
+##############################################################################
+# Leave empty to auto-detect (recommended for servers with module system)
+# Or set to your custom FFTW library path, e.g.:
+#   USER_FFTW3_LIB_PATH="/usr/local/fftw/lib"
+#   USER_FFTW3_LIB_PATH="/home/user/fftw-3.3.10/lib"
+#   USER_FFTW3_LIB_PATH="/appl/fftw/lib"
+USER_FFTW3_LIB_PATH=""
+##############################################################################
+
 # Timing
 BUILD_START=$(date +%s)
 echo "========================================="
@@ -25,6 +36,80 @@ fi
 
 ## Set environmental variables
 . ./bin/bashrc
+
+## Detect server vs local installation and handle FFTW
+echo "====================================="
+echo "    CHECKING FFTW AVAILABILITY"
+echo "====================================="
+
+# If user set custom FFTW path, use that
+if [ -n "$USER_FFTW3_LIB_PATH" ]; then
+    echo "User-specified FFTW path detected"
+    export FFTW3_LIB_PATH="$USER_FFTW3_LIB_PATH"
+    echo "  Using FFTW from: $FFTW3_LIB_PATH"
+
+    if [ ! -f "$FFTW3_LIB_PATH/libfftw3.a" ]; then
+        echo ""
+        echo "ERROR: libfftw3.a not found at $FFTW3_LIB_PATH"
+        echo "  Check USER_FFTW3_LIB_PATH setting in Allwmake"
+        echo ""
+        exit 1
+    fi
+
+# Check if module command is available (server installation indicator)
+elif command -v module &> /dev/null; then
+    echo "Server installation detected (module command available)"
+
+    # Try to load FFTW module
+    if module load fftw3/3.3.10 2>/dev/null; then
+        echo "✓ FFTW3/3.3.10 module loaded successfully"
+        export FFTW3_LIB_PATH="${FFTW3_LIB_PATH}"
+        echo "  Using FFTW from: $FFTW3_LIB_PATH"
+
+        # Verify libfftw3.a actually exists at this path
+        if [ ! -f "$FFTW3_LIB_PATH/libfftw3.a" ]; then
+            echo ""
+            echo "ERROR: libfftw3.a not found at $FFTW3_LIB_PATH"
+            echo "  Module loaded but library missing or path incorrect"
+            echo ""
+            exit 1
+        fi
+    else
+        echo "✗ FFTW3/3.3.10 module not available"
+        echo "  Checking for local libfftw3.a..."
+        if [ ! -f "/usr/lib64/libfftw3.a" ] && [ ! -f "/usr/local/lib/libfftw3.a" ]; then
+            echo ""
+            echo "ERROR: FFTW3 static library (libfftw3.a) not found!"
+            echo "  - Try loading module: module load fftw3"
+            echo "  - Or install: sudo yum install fftw-static"
+            echo "  - Or set USER_FFTW3_LIB_PATH in Allwmake"
+            echo ""
+            exit 1
+        fi
+    fi
+else
+    echo "Local PC installation detected (no module command)"
+    echo "  Checking for libfftw3.a in standard locations..."
+
+    if [ -f "/usr/lib64/libfftw3.a" ]; then
+        export FFTW3_LIB_PATH="/usr/lib64"
+        echo "  ✓ Found at: $FFTW3_LIB_PATH/libfftw3.a"
+    elif [ -f "/usr/local/lib/libfftw3.a" ]; then
+        export FFTW3_LIB_PATH="/usr/local/lib"
+        echo "  ✓ Found at: $FFTW3_LIB_PATH/libfftw3.a"
+    else
+        echo "  ✗ libfftw3.a not found in standard locations"
+        echo ""
+        echo "ERROR: FFTW3 static library required for Grid2Grid build"
+        echo "  Install with: sudo yum install fftw-static"
+        echo "  Or set USER_FFTW3_LIB_PATH in Allwmake"
+        echo ""
+        exit 1
+    fi
+fi
+
+echo "====================================="
+echo ""
 
 ## Check if WAVES_DIR exists
 if [ ! -d "$WAVES_DIR" ]
@@ -184,6 +269,7 @@ do
 done
 
 # Compile the setWaveField and account for the inclusion of lwaveModels (IHFoam) as of 2012-ESI
+# Note: GABC disabled for v2606+ due to C++ compatibility issues
 if [ "$OFPLUSBRANCH" -eq "1" ]
 then
     if [ "$WM_PROJECT_VERSION_NUMBER" -lt 1812 ]
@@ -192,8 +278,11 @@ then
     elif [ "$WM_PROJECT_VERSION_NUMBER" -lt 2012 ]
     then
         ln -s -f $WAVES_PRE/setWaveField/Make/optionsPre2012 $WAVES_PRE/setWaveField/Make/options
-    else
+    elif [ "$WM_PROJECT_VERSION_NUMBER" -lt 2606 ]
+    then
         ln -s -f $WAVES_PRE/setWaveField/Make/options2012 $WAVES_PRE/setWaveField/Make/options
+    else
+        ln -s -f $WAVES_PRE/setWaveField/Make/optionsNonGABC $WAVES_PRE/setWaveField/Make/options
     fi
 else
     ln -s -f $WAVES_PRE/setWaveField/Make/optionsNonGABC $WAVES_PRE/setWaveField/Make/options

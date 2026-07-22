@@ -29,8 +29,15 @@ fi
 
 # Auto-detect FFTW from loaded modules
 if [ -n "$FFTWDIR" ]; then
-    export FFTW3_LIB_PATH="$FFTWDIR"
-    export FFTW3_INCLUDE_PATH="$FFTWINCLUDE"
+    export FFTW3_LIB_PATH="$FFTWDIR/lib"
+    export FFTW3_INCLUDE_PATH="$FFTWDIR/include"
+elif [ -d "$(echo $CMAKE_PREFIX_PATH | cut -d: -f1)" ]; then
+    # Use CMAKE_PREFIX_PATH from module (e.g., fftw3/3.3.10)
+    # CMAKE_PREFIX_PATH is like: /appl9/fftw/3.3.10/.../lib/cmake
+    # We need: /appl9/fftw/3.3.10/.../lib
+    FFTW_PREFIX=$(echo $CMAKE_PREFIX_PATH | cut -d: -f1)
+    export FFTW3_LIB_PATH="${FFTW_PREFIX%/cmake}"
+    export FFTW3_INCLUDE_PATH="$(dirname ${FFTW3_LIB_PATH})/include"
 else
     export FFTW3_LIB_PATH=/usr/lib64
     export FFTW3_INCLUDE_PATH=/usr/include
@@ -96,7 +103,7 @@ export EXTBRANCH
 ## Is it the new foam-extend class?
 FOAMEXTENDPROJECT=0
 
-if [ $WM_PROJECT == "foam" ]
+if [ "$WM_PROJECT" == "foam" ]
 then
     FOAMEXTENDPROJECT=1
 fi
