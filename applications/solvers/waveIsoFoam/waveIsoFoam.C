@@ -66,6 +66,7 @@ Description
 #include "CorrectPhi.H"
 #include "fvcSmooth.H"
 #include "dynamicRefineFvMesh.H"
+#include "gravityModel.H"
 
 #include "relaxationZone.H"
 #include "externalWaveForcing.H"

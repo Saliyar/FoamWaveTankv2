@@ -19,6 +19,12 @@ export WAVES_DIR="$(dirname "$BASHRC_DIR")"
 export WAVES_APPBIN=$FOAM_USER_APPBIN
 export WAVES_LIBBIN=$FOAM_USER_LIBBIN
 
+# Location of the geometricGravity repo (libnewGeometricVoF, libgravityModels).
+# Override by exporting GEOMETRIC_GRAVITY_DIR before sourcing this file.
+if [ -z "$GEOMETRIC_GRAVITY_DIR" ]; then
+    export GEOMETRIC_GRAVITY_DIR=/home/projects/dtu_00075/apps/geometricGravity
+fi
+
 # Auto-detect GSL and FFTW from loaded modules, fallback to system defaults
 if [ -z "$WAVES_GSL_INCLUDE" ]; then
     export WAVES_GSL_INCLUDE=/usr/include

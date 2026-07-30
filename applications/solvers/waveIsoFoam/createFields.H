@@ -135,5 +135,11 @@ mesh.setFluxRequired(alpha1.name());
 
 isoAdvection advector(alpha1, phi, U);
 
+// Gravity model for calculating gravity force read from
+// constant/gravityProperties or use default ("basic", i.e. unchanged
+// behaviour). Must be constructed after isoAdvection so that the
+// reconstructionScheme object is already registered.
+autoPtr<gravityModel> gravity = gravityModel::New(mesh);
+
 relaxationZone relaxing(mesh, U, alpha1);
 
