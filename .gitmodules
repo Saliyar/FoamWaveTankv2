@@ -6,3 +6,6 @@
 	path = applications/solvers/floatStepperWaveFoam
 	url = https://github.com/FloatStepper/FloatStepper
 	branch = master
+[submodule "ThirdParty/geometricGravity"]
+	path = ThirdParty/geometricGravity
+	url = https://github.com/isoAdvector/geometricGravity.git
