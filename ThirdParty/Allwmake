@@ -6,7 +6,7 @@ function Grid2GridInstall()
 {
     # Exit immediately if there is an error
     # set -e
-    
+
     # Set the directory for Grid2Grid installation
     SRCDIR="Grid2Grid/"
     LIBRARY="$FOAM_USER_LIBBIN/libGrid2Grid.so"
@@ -26,7 +26,7 @@ function Grid2GridInstall()
     fi
 
     echo "Grid2Grid folder is found and populated."
-    
+
     # Check if the required GCC version is available
     GCCREQUIRE="4.9"
     CHECKGCC=$(printf '%s\n' "${GCCREQUIRE}" "`gcc -dumpversion`" | sort -V | head -n1)
@@ -54,12 +54,61 @@ function Grid2GridInstall()
 
     # Move postG2G to the build directory
     mv postG2G build/.
-    
+
     # Return to the previous directory
     popd
 }
 
 Grid2GridInstall
+
+echo "====================================="
+echo "    COMPILE GEOMETRIC GRAVITY MODELS"
+echo "====================================="
+
+function GeometricGravityInstall()
+{
+    SRCDIR="geometricGravity/"
+    LIBRARY="$FOAM_USER_LIBBIN/libgravityModels.so"
+
+    # Check if libraries already exist
+    if [ -f "${LIBRARY}" ]; then
+        echo "libgravityModels.so is already present in \$FOAM_USER_LIBBIN."
+        echo "Skipping geometricGravity build."
+        return 0
+    fi
+
+    # Check if geometricGravity folder exists (as submodule)
+    if [ ! -d "${SRCDIR}" ]; then
+        echo "WARNING: geometricGravity folder not found at ${SRCDIR}"
+        echo "Make sure git submodule is initialized: git submodule update --init ThirdParty/geometricGravity"
+        echo "Continuing without gravityModels - you must have libgravityModels.so available separately."
+        return 0
+    fi
+
+    echo "Building geometricGravity gravityModels and newGeometricVoF libraries..."
+    pushd "${SRCDIR}" || return 0
+    echo "$(pwd)"
+
+    # Build only the libraries we need, not utilities or applications
+    echo "Building newGeometricVoF library..."
+    (cd newGeometricVoF && wmake libso)
+
+    echo "Building gravityModels library..."
+    (cd gravityModels && wmake libso)
+
+    popd
+
+    # Check if gravityModels was built
+    if [ -f "${LIBRARY}" ]; then
+        echo "SUCCESS: libgravityModels.so built and available"
+    else
+        echo "WARNING: libgravityModels.so not found - make sure gravityModels library built successfully"
+    fi
+
+    return 0
+}
+
+GeometricGravityInstall
 
 echo "====================================="
 echo "    COMPILE FENTON4FOAM"
