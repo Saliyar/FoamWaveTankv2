@@ -11,3 +11,8 @@ Make/.*
 *.o
 *.so
 **/constant/modes_HOS_SWENSE.dat
+
+# Build artifacts
+**/Make/linux64*/
+ThirdParty/Grid2Grid/
+log.build
