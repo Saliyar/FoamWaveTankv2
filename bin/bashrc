@@ -27,10 +27,18 @@ fi
 
 # Auto-detect GSL and FFTW from loaded modules, fallback to system defaults
 if [ -z "$WAVES_GSL_INCLUDE" ]; then
-    export WAVES_GSL_INCLUDE=/usr/include
+    if [ -n "$GSL_ROOT" ]; then
+        export WAVES_GSL_INCLUDE=$GSL_ROOT/include
+    else
+        export WAVES_GSL_INCLUDE=/usr/include
+    fi
 fi
 if [ -z "$WAVES_GSL_LIB" ]; then
-    export WAVES_GSL_LIB=/usr/lib64
+    if [ -n "$GSL_ROOT" ]; then
+        export WAVES_GSL_LIB=$GSL_ROOT/lib
+    else
+        export WAVES_GSL_LIB=/usr/lib64
+    fi
 fi
 
 # Auto-detect FFTW from loaded modules
