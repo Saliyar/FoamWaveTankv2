@@ -196,3 +196,30 @@ Not copied (company files, behaviour re-implemented in B2): waveGenerator (dispa
 3. Confirm that git author "Saliyar" is Sithik, for the Air2Air copy (B5).
 4. Grid2Grid soft-start must be off (B2, row Incident water).
 5. Whether FoamWaveTank's wetted-geometry classes (convexPolyhedral) match the study wetted-cell behaviour (B2).
+
+## B6. Two solvers: waveFoamSWENSE and waveIsoFoamSWENSE (added before coding)
+
+Motivation: FoamWaveTankv2 has two wave solvers, waveFoam (VoF alpha, OpenFOAM
+alphaEqnSubCycle) and waveIsoFoam (isoAdvector alpha, FoamWaveTankv2's own
+alphaEqnSubCycle.H / alphaEqn.H). The SWENSE versions mirror them.
+
+### B6.1 What is shared (written once)
+Everything that is not the alpha transport:
+- Set-up: mesh, pimpleControl, readWaveProperties, createExternalWaveForcing (Grid2Grid), incident fields (swenseIncident), relaxation weight (swenseRelaxation), U, Uc, pc, p_rgh, phi, mixture, rho, rhoPhi, transport model, gh, pStar, phiComp, phiInc, Ucf.
+- Time loop skeleton: runTime++, externalWave->step(), incident update, phiInc = UfInc . Sf, phi = phiComp + phiInc, PIMPLE outer loop, pStar = (rho/rho1) pInc, momentum predictor, pressure corrector.
+- Momentum (Uc) and pressure (pc) equations with the phiSource term and reconstruction (B1.3), including constrainHbyA, constrainPressure and adjustPhi.
+- Relaxation after the alpha step: alpha1 = (1 - w) alpha1 + w alphaInc; limited rho update; mixture.correct().
+- End of step: Uc = (1 - w) Uc, U = Uc + UInc, p = pc + pStar, p_rgh = p - rho gh, write.
+These live in the library, in src/swenseWaveTank/solver/ (shared headers), so both solvers include the same files.
+
+### B6.2 What differs: the alpha step only
+- waveFoamSWENSE: OpenFOAM v2412 VoF alpha step (alphaEqnSubCycle.H from the VoF solver directory), as in B1.3. Settings from the alpha solver dictionary (nAlphaCorr, MULESCorr, cAlpha, ...).
+- waveIsoFoamSWENSE: isoAdvector alpha step, as in waveIsoFoam (isoAdvection advector(alpha1, phi, U); advector.advect(Sp, Su); rhoPhi = advector.getRhoPhi(rho1, rho2); alpha2 = 1 - alpha1; mixture.correct()). The step is FoamWaveTankv2's own alphaEqnSubCycle.H and alphaEqn.H, which include the outer-iteration averaging of phi and U (kept, since it belongs to that alpha step).
+
+### B6.3 Same SWENSE flux for both
+The isoAdvector step advects alpha1 with the total SWENSE flux phi = phiComp + phiInc, set before the alpha step (B1.2 step 3). It does not use a separate flux. The alpha relaxation toward alphaInc with the farfield weight w (B1.8) is applied after the alpha step in both solvers, followed by the same rho and mixture update. The isoAdvection surface reconstruction and map (waveIsoFoam, moving-mesh branch) are not used: the mesh is static.
+
+### B6.4 Solver directories
+- applications/solvers/waveFoamSWENSE/: waveFoamSWENSE.C (main, includes the shared time loop), createSolverFields.H (alpha objects: alphaControls, alphaFluxes), alphaStep.H (VoF alpha), alphaSuSp.H, rhofs.H.
+- applications/solvers/waveIsoFoamSWENSE/: waveIsoFoamSWENSE.C (same main), createSolverFields.H (isoAdvection advector), alphaStep.H (isoAdvector, with the outer averaging), alphaControls.H, alphaSuSp.H, rhofs.H.
+- Both mains are the same two-line body (shared set-up and time loop), so the only per-solver files are the alpha step and its set-up.
