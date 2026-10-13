@@ -1,0 +1,14 @@
+/* Air2Air (Sithik's own code, copied unchanged) */
+Air2AirEnhanced.C
+Air2AirWrapper.C
+
+/* SWENSE incident fields, wetted geometry and relaxation */
+swenseSurface.C
+swenseIncident.C
+swenseRelaxation.C
+
+/* Boundary conditions */
+fvPatchFields/swenseWaveVelocity/swenseWaveVelocityFvPatchVectorField.C
+fvPatchFields/swenseWaveAlpha/swenseWaveAlphaFvPatchScalarField.C
+
+LIB = $(FOAM_USER_LIBBIN)/libswenseWaveTank
