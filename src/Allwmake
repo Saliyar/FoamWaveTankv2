@@ -42,6 +42,9 @@ fi
 # Compile the library
 (cd waves2Foam          ; wmake libso)
 
+# SWENSE library (depends on waves2Foam)
+(cd swenseWaveTank      ; wmake libso)
+
 if [ $OFPLUSBRANCH -eq "1" ]
 then
     if [ "$WM_PROJECT_VERSION_NUMBER" -gt "1806" ] && [ "$WM_PROJECT_VERSION_NUMBER" -lt "2606" ]

@@ -184,7 +184,7 @@ echo ""
 echo "====================================="
 echo "    COMPILE SOLVERS"
 echo "====================================="
-solvers=`ls -d $WAVES_SOL/wave*`
+solvers=`ls -d $WAVES_SOL/wave* $WAVES_SOL/swense*`
 
 # Loop over the solver names
 for s in $solvers
