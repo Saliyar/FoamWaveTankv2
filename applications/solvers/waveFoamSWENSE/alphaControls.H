@@ -31,5 +31,4 @@ const scalar scAlpha
     alphaControls.lookupOrDefault<scalar>("scAlpha", 0.0)
 );
 
-// Euler transport only: no restart, no local time stepping
 const bool LTS = false;

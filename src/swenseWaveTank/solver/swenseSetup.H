@@ -1,3 +1,7 @@
+// Shared SWENSE set-up: fields, mixture, incident and relaxation objects.
+// Included by both waveFoamSWENSE and waveIsoFoamSWENSE. The alpha-specific
+// objects are created in the solver's createSolverFields.H.
+
 // Gravity (OpenFOAM v2412 standard), waveProperties and the Grid2Grid
 // external wave forcing (waves2Foam), as waveFoam does
 #include "readGravitationalAcceleration.H"
@@ -163,5 +167,3 @@ bool includeDivUInc
     pimple.dict().lookupOrDefault<Switch>("includeDivUInc", false)
 );
 
-// Alpha flux storage used by the VoF alpha step
-#include "createAlphaFluxes.H"
