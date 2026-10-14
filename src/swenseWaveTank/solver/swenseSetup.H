@@ -33,6 +33,51 @@ volScalarField pc
     mesh
 );
 
+// Start-up check (document Section 16, Part 1 rows 12-13): the complementary
+// fields pc and Uc must not read the total U or the total flux phi. Such
+// boundary conditions give a non-zero complementary value when the flow is
+// exactly incident. Allowed: fixedValue, zeroGradient, fixedFluxPressure, etc.
+{
+    const wordList forbidden
+    (
+        {
+            "totalPressure",
+            "pressureInletOutletVelocity",
+            "pressureInletVelocity",
+            "pressureInletOutletParSlipVelocity",
+            "flowRateInletVelocity",
+            "inletOutlet",
+            "outletInlet"
+        }
+    );
+
+    forAll(pc.boundaryField(), patchi)
+    {
+        if (forbidden.found(pc.boundaryField()[patchi].type()))
+        {
+            FatalErrorInFunction
+                << "pc on patch " << pc.boundaryField()[patchi].patch().name()
+                << " uses " << pc.boundaryField()[patchi].type()
+                << ", which reads the total U or phi. Use fixedValue or"
+                << " zeroGradient for the complementary pressure."
+                << exit(FatalError);
+        }
+    }
+
+    forAll(Uc.boundaryField(), patchi)
+    {
+        if (forbidden.found(Uc.boundaryField()[patchi].type()))
+        {
+            FatalErrorInFunction
+                << "Uc on patch " << Uc.boundaryField()[patchi].patch().name()
+                << " uses " << Uc.boundaryField()[patchi].type()
+                << ", which reads the total U or phi. Use fixedValue or"
+                << " zeroGradient for the complementary velocity."
+                << exit(FatalError);
+        }
+    }
+}
+
 // Total flux, initialised from the total velocity
 surfaceScalarField phi
 (
@@ -51,13 +96,71 @@ volScalarField& alpha2(mixture.alpha2());
 const dimensionedScalar& rho1 = mixture.rho1();
 const dimensionedScalar& rho2 = mixture.rho2();
 
+// Blended incident fields (water and air, weight alphaI)
+Info<< "Creating SWENSE incident fields\n" << endl;
+swenseIncident incident(mesh, externalWave(), rho1, rho2);
+
+// Incident flux of alphaI (also the flux of the alphaI boundary inletOutlet)
+surfaceScalarField phiInc
+(
+    IOobject("phiInc", runTime.timeName(), mesh,
+        IOobject::NO_READ, IOobject::NO_WRITE),
+    incident.UfInc() & mesh.Sf()
+);
+
+// Advected incident volume fraction alphaI (document Section 14.2). Its
+// start value is the blend weight, and alpha starts equal to it (Theorem 1).
+// Copy of alpha1 so that alphaI has the same boundary types (swenseWaveAlpha
+// at the farfield, which takes the blend weight on the boundary faces)
+// Boundary types come from 0/alphaI (the farfield swenseWaveAlpha, the
+// atmosphere inletOutlet with phi phiInc, the walls); values are set below
+volScalarField alphaI
+(
+    IOobject("alphaI", runTime.timeName(), mesh,
+        IOobject::MUST_READ, IOobject::AUTO_WRITE),
+    mesh
+);
+
+alphaI.primitiveFieldRef() =
+    incident.blendAlpha(runTime.value()).primitiveField();
+alphaI.correctBoundaryConditions();
+
+alpha1.primitiveFieldRef() = alphaI.primitiveField();
+alpha1.correctBoundaryConditions();
+alpha2 = 1.0 - alpha1;
+mixture.correct();
+
+// Densities from the same function of the volume fraction (document 16.1)
 volScalarField rho
 (
     IOobject("rho", runTime.timeName(), mesh,
         IOobject::NO_READ, IOobject::AUTO_WRITE),
-    alpha1*rho1 + alpha2*rho2
+    swenseRho(alpha1, rho1, rho2)
 );
 rho.oldTime();
+
+volScalarField rhoI
+(
+    IOobject("rhoI", runTime.timeName(), mesh,
+        IOobject::NO_READ, IOobject::NO_WRITE),
+    swenseRho(alphaI, rho1, rho2)
+);
+
+// rho/rhoI, the density ratio of the pressure split (document 16.2)
+volScalarField rhoByRhoI
+(
+    IOobject("rhoByRhoI", runTime.timeName(), mesh,
+        IOobject::NO_READ, IOobject::NO_WRITE),
+    rho/rhoI
+);
+
+// HOS target for the relaxation zones, same initial value as alphaI
+volScalarField alphaH
+(
+    IOobject("alphaH", runTime.timeName(), mesh,
+        IOobject::NO_READ, IOobject::NO_WRITE),
+    alphaI
+);
 
 surfaceScalarField rhoPhi
 (
@@ -77,10 +180,7 @@ autoPtr<transportModelType> turbulence
     new transportModelType(rho, U, phi, rhoPhi, mixture)
 );
 
-// SWENSE incident fields and relaxation weight
-Info<< "Creating SWENSE incident fields\n" << endl;
-swenseIncident incident(mesh, externalWave(), rho1);
-
+// SWENSE relaxation weight
 Info<< "Creating SWENSE relaxation\n" << endl;
 const dictionary& farfieldDict =
     mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
@@ -88,12 +188,12 @@ const dictionary& farfieldDict =
 swenseRelaxation relax(mesh, farfieldDict.subDict("relaxationZone"));
 const volScalarField& w = relax.weight();
 
-// Incident pressure scaled to the mixture density, and the total pressure
+// Incident part of p: pStar = (rho/rhoI) pI (document eq. 16.2)
 volScalarField pStar
 (
     IOobject("pStar", runTime.timeName(), mesh,
         IOobject::NO_READ, IOobject::NO_WRITE),
-    rho/rho1*incident.pInc()
+    incident.pInc()
 );
 
 // Reference height (constant/hRef, default 0) and gravity potential
@@ -148,11 +248,13 @@ surfaceScalarField phiComp
     fvc::flux(Uc)
 );
 
-surfaceScalarField phiInc
+
+// Incident mass flux of alphaI (returned by its transport, document 16.3)
+surfaceScalarField rhoPhiI
 (
-    IOobject("phiInc", runTime.timeName(), mesh,
+    IOobject("rhoPhiI", runTime.timeName(), mesh,
         IOobject::NO_READ, IOobject::NO_WRITE),
-    incident.UfInc() & mesh.Sf()
+    fvc::interpolate(rhoI)*phiInc
 );
 
 phi = phiComp + phiInc;

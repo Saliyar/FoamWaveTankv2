@@ -1,3 +1,2 @@
-// VoF-specific fields and controls for the alpha step
-#include "alphaControls.H"
-#include "createAlphaFluxes.H"
+// Incident velocity for the alphaI transport and the compression terms
+const volVectorField& UInc = incident.UInc();

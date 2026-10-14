@@ -13,6 +13,13 @@
 #include <algorithm>
 #include <limits>
 
+namespace
+{
+const int nSaveRecords = 6;
+const int nBandRecords = 3;
+const double dtRecord = 0.05;          // record spacing of the HOS data [s]
+}
+
 namespace Foam
 {
 
@@ -245,8 +252,8 @@ Air2AirEnhanced::Air2AirEnhanced(const string& modesFile, const dictionary& dict
 
     setupCutoff(dict);
 
-    cache_[0].index = -1;
-    cache_[1].index = -1;
+    cache_.assign(nSaveRecords, slot());
+    for (slot& c : cache_) c.index = -1;
 
     Info<< "Air2AirEnhanced: order " << order_
         << ", pressureModel " << (bernoulli_ ? "bernoulli" : "linear") << nl
@@ -259,16 +266,121 @@ Air2AirEnhanced::Air2AirEnhanced(const string& modesFile, const dictionary& dict
 Air2AirEnhanced::~Air2AirEnhanced()
 {}
 
+// * * * * * * * * * * * * * * Time interpolation (Grid2Grid scheme) * * * * * //
+//
+// Grid2Grid (hosVol2Vol.inc: nInterp = interpolationOrder + 1 = 4, nSaveT =
+// nInterp + 2 = 6, nBand = floor(nSaveT/2) = 3, correctIdx = ceiling(t/dt),
+// window start = correctIdx - nBand clamped to the record range) interpolates
+// the HOS data with a cubic B-spline over a window of six records, with
+// automatic knots and not-a-knot end conditions (bspline_oo_module.f90, db1ink
+// with iknot = 0). Air2Air uses the same window, nodes and knot vector for
+// every mode coefficient A_k and for w0.
+
+namespace
+{
+
+
+// Cubic B-spline basis B_j(x), j = 0..5, and derivatives, on a knot vector
+// of 10 knots (order 4); x in [kv[0], kv[9]]
+void bsplBasis(const scalar* kv, const scalar x, scalar* B, scalar* dB)
+{
+    const int nK = 10;
+    scalar N[10][4];
+    for (int i = 0; i < nK; ++i)
+        for (int p = 0; p < 4; ++p) N[i][p] = 0;
+
+    for (int i = 0; i < nK - 1; ++i)
+    {
+        if (kv[i] < kv[i+1])
+        {
+            if ((x >= kv[i] && x < kv[i+1]) || (x == kv[nK-1] && kv[i+1] == kv[nK-1]))
+            {
+                N[i][0] = 1;
+            }
+        }
+    }
+
+    for (int p = 1; p <= 3; ++p)
+    {
+        for (int i = 0; i < nK - 1 - p; ++i)
+        {
+            scalar a = 0, b = 0;
+            const scalar d1 = kv[i+p] - kv[i];
+            const scalar d2 = kv[i+p+1] - kv[i+1];
+            if (d1 > 0) a = (x - kv[i])/d1*N[i][p-1];
+            if (d2 > 0) b = (kv[i+p+1] - x)/d2*N[i+1][p-1];
+            N[i][p] = a + b;
+        }
+    }
+
+    for (int j = 0; j < 6; ++j)
+    {
+        B[j] = N[j][3];
+        scalar d = 0;
+        const scalar d1 = kv[j+3] - kv[j];
+        const scalar d2 = kv[j+4] - kv[j+1];
+        if (d1 > 0) d += N[j][2]/d1;
+        if (d2 > 0) d -= N[j+1][2]/d2;
+        dB[j] = 3*d;
+    }
+}
+
+// Inverse of a 6x6 matrix by Gauss-Jordan elimination with partial pivoting
+void invert6(scalar M[6][6], scalar Minv[6][6])
+{
+    scalar a[6][12];
+    for (int i = 0; i < 6; ++i)
+        for (int j = 0; j < 12; ++j)
+            a[i][j] = (j < 6) ? M[i][j] : ((j - 6) == i ? 1.0 : 0.0);
+
+    for (int c = 0; c < 6; ++c)
+    {
+        int piv = c;
+        for (int r = c + 1; r < 6; ++r)
+            if (std::fabs(a[r][c]) > std::fabs(a[piv][c])) piv = r;
+        for (int j = 0; j < 12; ++j) std::swap(a[c][j], a[piv][j]);
+        const scalar d = a[c][c];
+        for (int j = 0; j < 12; ++j) a[c][j] /= d;
+        for (int r = 0; r < 6; ++r)
+        {
+            if (r == c) continue;
+            const scalar f = a[r][c];
+            for (int j = 0; j < 12; ++j) a[r][j] -= f*a[c][j];
+        }
+    }
+
+    for (int i = 0; i < 6; ++i)
+        for (int j = 0; j < 6; ++j)
+            Minv[i][j] = a[i][j+6];
+}
+
+}
+
+
 // * * * * * * * * * * * * * * Coefficients  * * * * * * * * * * * * * * * * //
 
 // Coefficients of record it; 'other' is the record that must stay cached
-const Air2AirEnhanced::slot& Air2AirEnhanced::coeffs(int it, int other) const
+const Air2AirEnhanced::slot& Air2AirEnhanced::coeffs(int it, int iLeft) const
 {
-    for (int s = 0; s < 2; ++s)
-        if (cache_[s].index == it) return cache_[s];
+    for (const slot& c : cache_)
+        if (c.index == it) return c;
 
-    const int s = (cache_[0].index == other) ? 1 : 0;
-    slot& c = cache_[s];
+    // Free a slot outside the current window [iLeft, iLeft + nSaveRecords - 1]
+    slot* freeSlot = nullptr;
+    for (slot& c : cache_)
+    {
+        if (c.index < iLeft || c.index > iLeft + nSaveRecords - 1)
+        {
+            freeSlot = &c;
+            break;
+        }
+    }
+    if (!freeSlot)
+    {
+        FatalErrorInFunction << "no free record slot in the Air2Air window"
+            << exit(FatalError);
+    }
+    slot& c = *freeSlot;
 
     std::vector<scalar> e, et;
     readModes(it, e, et, Mx_, My_);
@@ -306,25 +418,85 @@ const Air2AirEnhanced::slot& Air2AirEnhanced::coeffs(int it, int other) const
 void Air2AirEnhanced::update(scalar t)
 {
     const scalar Ts = std::sqrt(h_/g_);
-    scalar s = std::max(scalar(0), t/Ts)/dt_;          // position in records
-    s = std::min(s, scalar(nt_ - 1));
-    const int i0 = std::min(int(std::floor(s)), nt_ - 2);
-    const scalar f = s - i0;
 
-    const slot& c0 = coeffs(i0, i0 + 1);
-    const slot& c1 = coeffs(i0 + 1, i0);
+    // Grid2Grid window: correctIdx = ceiling(t/dt), start = correctIdx - nBand,
+    // clamped to the records (hosVol2Vol.inc)
+    int iLeft = int(std::ceil(std::max(t, scalar(0))/dtRecord)) - nBandRecords;
+    iLeft = std::max(iLeft, 0);
+    iLeft = std::min(iLeft, nt_ - nSaveRecords);
 
     const int N = Mx_*My_;
+    std::vector<const slot*> win(nSaveRecords);
+    for (int j = 0; j < nSaveRecords; ++j)
+    {
+        win[j] = &coeffs(iLeft + j, iLeft);
+    }
+
+    // Not-a-knot cubic B-spline nodes tau_j = (iLeft + j) dt, knots 4 x tau0,
+    // tau2, tau3, 4 x tau5
+    scalar tau[6];
+    for (int j = 0; j < 6; ++j) tau[j] = (iLeft + j)*dtRecord;
+    scalar kv[10] =
+    {
+        tau[0], tau[0], tau[0], tau[0], tau[2], tau[3],
+        tau[5], tau[5], tau[5], tau[5]
+    };
+
+    scalar M[6][6], Minv[6][6];
+    for (int i = 0; i < 6; ++i)
+    {
+        scalar B[6], dB[6];
+        bsplBasis(kv, tau[i], B, dB);
+        for (int j = 0; j < 6; ++j) M[i][j] = B[j];
+    }
+    invert6(M, Minv);
+
+    scalar Bt[6], dBt[6];
+    bsplBasis(kv, t, Bt, dBt);
+
     A_.resize(N);
     At_.resize(N);
     for (int q = 0; q < N; ++q)
     {
-        A_[q] = (1 - f)*c0.A[q] + f*c1.A[q];
-        At_[q] = (c1.A[q] - c0.A[q])/dt_;
+        scalar A = 0, dA = 0;
+        for (int j = 0; j < 6; ++j)
+        {
+            scalar cj = 0;
+            for (int i = 0; i < 6; ++i) cj += Minv[j][i]*win[i]->A[q];
+            A += cj*Bt[j];
+            dA += cj*dBt[j];
+        }
+        A_[q] = A;
+        At_[q] = Ts*dA;            // d/dtau, tau = t/Ts
     }
-    w0_ = (1 - f)*c0.w0 + f*c1.w0;
-    w0t_ = (c1.w0 - c0.w0)/dt_;
+
+    {
+        scalar A = 0, dA = 0;
+        for (int j = 0; j < 6; ++j)
+        {
+            scalar cj = 0;
+            for (int i = 0; i < 6; ++i) cj += Minv[j][i]*win[i]->w0;
+            A += cj*Bt[j];
+            dA += cj*dBt[j];
+        }
+        w0_ = A;
+        w0t_ = Ts*dA;
+    }
+
     updated_ = true;
+}
+
+
+void Air2AirEnhanced::recordCoefficients
+(
+    int it,
+    std::vector<scalar>& A,
+    scalar& w0
+) const
+{
+    const slot& c = coeffs(it, it);
+    A = c.A;
+    w0 = c.w0;
 }
 
 // * * * * * * * * * * * * * * Field evaluation  * * * * * * * * * * * * * * //

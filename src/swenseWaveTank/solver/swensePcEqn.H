@@ -21,11 +21,9 @@
         adjustPhi(phiHbyA, Uc, pc);
     }
 
-    // Interface term from the incident pressure (SWENSE source)
-    surfaceScalarField phiSource
-    (
-        -fvc::snGrad(rho)/rho1*incident.pfInc()*mesh.magSf()*rAUf
-    );
+    // Interface force as a face flux (eq. 16.6), the same source as in the
+    // momentum predictor, times rA on the faces
+    surfaceScalarField phiSource(phiSource0*rAUf);
 
     phiHbyA += phiSource;
 

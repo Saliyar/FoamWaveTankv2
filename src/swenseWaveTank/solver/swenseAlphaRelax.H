@@ -1,18 +1,18 @@
-// SWENSE relaxation of alpha toward the incident water fraction, then the
-// limited density and mixture update, and the scaled incident pressure.
-// Applied after the alpha step of either solver.
+// Relaxation of alpha1 and alphaI toward the same HOS target alphaH with the
+// same weight (document Rev1, 16.3.3), then the densities rho and rhoI from
+// the same function (16.1), the density ratio (16.2) and the incident part
+// of the pressure pStar = (rho/rhoI) pI. Applied after the alpha transport
+// of each outer corrector; both fields restart from their old-time values
+// in every corrector, so the relaxation is not compounded.
 
-alpha1 = (1.0 - w)*alpha1 + w*incident.alphaInc();
+alpha1 = (1.0 - w)*alpha1 + w*alphaH;
+alphaI = (1.0 - w)*alphaI + w*alphaH;
 
-{
-    const volScalarField limitedAlpha1
-    (
-        "limitedAlpha1",
-        min(max(alpha1, scalar(0)), scalar(1))
-    );
-    rho == limitedAlpha1*rho1 + (1.0 - limitedAlpha1)*rho2;
-    mixture.correct();
-}
+rho == swenseRho(alpha1, rho1, rho2);
+rhoI == swenseRho(alphaI, rho1, rho2);
+rhoByRhoI == rho/rhoI;
 
-// Incident pressure scaled to the mixture density
-pStar == rho/rho1*incident.pInc();
+alpha2 = 1.0 - alpha1;
+mixture.correct();
+
+pStar == rhoByRhoI*incident.pInc();

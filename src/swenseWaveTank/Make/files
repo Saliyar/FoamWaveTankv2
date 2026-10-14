@@ -6,6 +6,7 @@ Air2AirWrapper.C
 swenseSurface.C
 swenseIncident.C
 swenseRelaxation.C
+swenseVoFAdvection.C
 
 /* Boundary conditions */
 fvPatchFields/swenseWaveVelocity/swenseWaveVelocityFvPatchVectorField.C

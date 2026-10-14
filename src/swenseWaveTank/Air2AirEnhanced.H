@@ -67,7 +67,7 @@ class Air2AirEnhanced
     std::vector<char> keep_;                 // Mx*My mask (k <= kcut)
 
     // Cache and current state (non-dimensional)
-    mutable slot cache_[2];
+    mutable std::vector<slot> cache_;        // records of the Grid2Grid-style window
     mutable bool printed_;
     scalar w0_, w0t_;
     std::vector<scalar> A_, At_;
@@ -77,7 +77,7 @@ class Air2AirEnhanced
     void readRecord(long rec, int n, std::vector<scalar>& v) const;
     void readModes(int it, std::vector<scalar>& e, std::vector<scalar>& et, int Mx, int My) const;
     void setupCutoff(const dictionary& dict);
-    const slot& coeffs(int it, int other) const;
+    const slot& coeffs(int it, int iLeft) const;
     void evaluate(scalar xs, scalar ys, scalar zs,
                   scalar& u, scalar& v, scalar& w, scalar& phi, scalar& phit) const;
 
@@ -97,6 +97,18 @@ public:
 
     //- Air pressure [Pa]: -rho psi_t (linear) or -rho(psi_t + |u|^2/2) (bernoulli)
     scalar pressure(scalar x, scalar y, scalar z) const;
+
+    //- Record coefficients A_k (all modes, k = 0 excluded from A) and w0 of
+    //  record it, for checks (B2.1-fix)
+    void recordCoefficients(int it, std::vector<scalar>& A, scalar& w0) const;
+
+    //- Number of records in the modes file
+    int nRecords() const { return nt_; }
+
+    //- Interpolated coefficients at the last update (checks, B2.1-fix)
+    const std::vector<scalar>& interpolatedA() const { return A_; }
+    scalar interpolatedW0() const { return w0_; }
+    const std::vector<scalar>& interpolatedAt() const { return At_; }
 
     //- Velocity potential [m^2/s]
     scalar potential(scalar x, scalar y, scalar z) const;

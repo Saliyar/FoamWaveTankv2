@@ -5,7 +5,8 @@
 #include "addToRunTimeSelectionTable.H"
 #include "fvPatchFieldMapper.H"
 #include "volFields.H"
-#include "swenseSurface.H"
+#include "swenseIncident.H"
+#include "IOdictionary.H"
 
 // * * * * * * * * * * * * * * * * * Constructors * * * * * * * * * * * * * * //
 
@@ -88,15 +89,17 @@ void Foam::swenseWaveAlphaFvPatchScalarField::updateCoeffs()
             "externalWaveForcing"
         );
 
-    swenseSurface surf(mesh, ext, t);
+    // Blend weight of the water incident field at the face centres, the
+    // same alphaI as the cell field (swenseIncident::blendWeight)
+    const scalar delta = swenseIncident::blendThickness(mesh.thisDb());
+    const vectorField& Cf = this->patch().Cf();
 
-    const scalarField& magSf = this->patch().magSf();
-    const label start = this->patch().patch().start();
-
-    forAll(magSf, facei)
+    forAll(Cf, facei)
     {
+        const point& x = Cf[facei];
+
         refValue()[facei] =
-            min(1.0, max(0.0, surf.wetArea(facei + start)/magSf[facei]));
+            swenseIncident::blendWeight(x.z() - ext.eta(x, t), delta);
     }
 
     refGrad() = 0.0;

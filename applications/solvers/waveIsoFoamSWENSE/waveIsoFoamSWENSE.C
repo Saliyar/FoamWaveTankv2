@@ -25,6 +25,7 @@ Description
 #include "constrainPressure.H"
 #include "swenseIncident.H"
 #include "swenseRelaxation.H"
+#include "swenseVoFAdvection.H"
 #include "externalWaveForcing.H"
 
 int main(int argc, char *argv[])

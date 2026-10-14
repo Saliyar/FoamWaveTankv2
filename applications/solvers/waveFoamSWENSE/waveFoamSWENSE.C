@@ -17,6 +17,8 @@ Description
 #include "CMULES.H"
 #include "EulerDdtScheme.H"
 #include "CrankNicolsonDdtScheme.H"
+#include "gaussConvectionScheme.H"
+#include "upwind.H"
 #include "immiscibleIncompressibleTwoPhaseMixture.H"
 #include "incompressibleInterPhaseTransportModel.H"
 #include "pimpleControl.H"
@@ -26,6 +28,7 @@ Description
 #include "constrainPressure.H"
 #include "swenseIncident.H"
 #include "swenseRelaxation.H"
+#include "swenseVoFAdvection.H"
 #include "externalWaveForcing.H"
 
 int main(int argc, char *argv[])

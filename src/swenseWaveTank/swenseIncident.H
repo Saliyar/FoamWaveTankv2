@@ -3,28 +3,38 @@ Class
     Foam::swenseIncident
 
 Description
-    Incident (wave) fields for the SWENSE solver.
+    Blended incident (wave) fields for the SWENSE solver.
 
-    Each cell and face is classified by its centre: water if z < eta(x, y, t),
-    air otherwise. Water values come from the Grid2Grid external wave forcing
-    (waves2Foam), air values from the Air2Air solver.
+    Water and air incident fields are blended with the incident volume
+    fraction alphaI (document swense_blended_incident, Section 6):
+
+        alphaI = clamp(0.5 - (z - eta)/delta, 0, 1)
+        UInc   = alphaI UW + (1 - alphaI) UA
+        pInc   = alphaI pW + (1 - alphaI) pA
+        rhoI   = alphaI rhoW + (1 - alphaI) rhoA
+
+    The blending law is only a starting weight: alphaI is then advected with
+    the incident velocity by the solver (Section 14.2), so the blend weight
+    returned by blendWeight() is used only for its initial value and for the
+    farfield boundary condition.
+
+    Water (alphaI = 1 region), Grid2Grid, in the wave frame:
+        UW = U_grid2grid(x, t)
+        pW = rho_w (pExcess(x, t) - g_mag z_w)        [hydrostatic included]
+    Air (alphaI = 0 region), Air2Air:
+        UA = R^T U_air(x_w, y_w, z - seaLevel)
+        pA = p_air(x_w, y_w, z - seaLevel) - rho_a g z_w   [hydrostatic]
 
     Wave frame (Grid2Grid convention, from Grid2GridCoeffs):
         x_w = R(theta) (x - referencePosition),  R(theta) = [c -s; s c]
     The Air2Air time is the Grid2Grid time t + referenceTime.
 
-    Water:
-        UInc = U_grid2grid(x, t)
-        pInc = rho_w (pExcess(x, t) - g_mag z_w)        [hydrostatic included]
-    Air:
-        UInc = R^T U_air(x_w, y_w, z - seaLevel)
-        pInc = p_air(x_w, y_w, z - seaLevel)
+    The water or air value is only evaluated where its weight is non-zero, so
+    Air2Air is never called deep in the water and Grid2Grid is never called
+    deep in the air.
 
-    Cell alphaInc is the wetted volume fraction (swenseSurface).
-
-    Interface correction: on internal faces whose two neighbouring cells have
-    different classification, pfInc is the water-side pressure at the free
-    surface above the face centre.
+    Blending thickness delta is read from waveProperties (blendThickness,
+    default 0.024 m).
 
 SourceFiles
     swenseIncident.C
@@ -40,7 +50,8 @@ SourceFiles
 #include "autoPtr.H"
 #include "externalWaveForcing.H"
 #include "Air2AirWrapper.H"
-#include "swenseSurface.H"
+#include "surfaceInterpolate.H"
+#include "fvc.H"
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -63,9 +74,6 @@ class swenseIncident
         //- Air2Air solver (optional, required for air values)
         autoPtr<Air2AirWrapper> air_;
 
-        //- Wetted-geometry helper
-        swenseSurface surf_;
-
         //- Wave frame from Grid2GridCoeffs (same frame as the Grid2Grid solver)
         const vector refPos_;
         const scalar theta_;
@@ -75,18 +83,24 @@ class swenseIncident
         const scalar seaLevel_;
         const scalar rhoWater_;
 
+        //- Blending thickness delta (m)
+        const scalar delta_;
+
+        //- Guard distance d_g = max(delta, 3 dz), dz = cell height at the
+        //  interface (document Rev4, 16.3 rule 5)
+        scalar guard_;
+
+        //- Air density (Air2Air pressure is linear in it; hydrostatic -rho_a g z)
+        const scalar rhoAir_;
+
         //- Gravity magnitude
         const scalar magG_;
 
-        //- Incident fields
+        //- Blended incident fields
         volVectorField UInc_;
         volScalarField pInc_;
-        volScalarField alphaInc_;
         surfaceVectorField UfInc_;
         surfaceScalarField pfInc_;
-
-        //- Cell classification from the last update: 1 water, 0 air
-        scalarField cellWater_;
 
     // Private member functions
 
@@ -104,8 +118,23 @@ class swenseIncident
         vector airU(const point& x) const;
         scalar airP(const point& x) const;
 
-        //- Water-side pressure at the free surface above x
-        scalar interfaceP(const point& x, const scalar t) const;
+        //- Weights of the water and air parts at x for the advected alphaI
+        //  (document Rev3 16.3.5): W = clamp((alphaI - eps)/(1 - 2 eps), 0, 1),
+        //  water part only where W > 0 and z - eta <= delta, air part only
+        //  where W < 1 and z - eta >= -delta; a part that is not evaluated has
+        //  weight exactly 0 and the other part weight exactly 1
+        void weights
+        (
+            const point& x,
+            const scalar t,
+            const scalar alphaI,
+            scalar& wWater,
+            scalar& wAir
+        ) const;
+
+        //- Blended velocity and pressure at x for the advected alphaI
+        vector blendU(const point& x, const scalar t, const scalar alphaI) const;
+        scalar blendP(const point& x, const scalar t, const scalar alphaI) const;
 
         //- Disallow default bitwise copy
         swenseIncident(const swenseIncident&);
@@ -114,31 +143,52 @@ class swenseIncident
 
 public:
 
+    // Static Member Functions
+
+        //- Blend weight of the water incident field for a height zRel above
+        //  the free surface (zRel = z - eta): 1 deep in water, 0 in air
+        static scalar blendWeight(const scalar zRel, const scalar delta);
+
+        //- Blending thickness from waveProperties (default 0.024 m)
+        static scalar blendThickness(const objectRegistry& db);
+
+        //- Cell height at the interface: largest spacing of the cell-centre
+        //  z levels with |z| < 0.1 m
+        static scalar interfaceCellHeight(const fvMesh& mesh);
+
+
     // Constructors
 
-        //- Construct from mesh, the registered external wave forcing and the
-        //  water density. Reads Grid2GridCoeffs and the optional Air2Air block
-        //  of farfieldCoeffs from waveProperties.
+        //- Construct from mesh, the registered external wave forcing, and the
+        //  water and air densities. Reads Grid2GridCoeffs and the optional
+        //  Air2Air block of farfieldCoeffs from waveProperties. The Air2Air
+        //  rhoAir must equal the air density.
         swenseIncident
         (
             const fvMesh& mesh,
             const waveTheories::externalWaveForcing& ext,
-            const dimensionedScalar& rhoWater
+            const dimensionedScalar& rhoWater,
+            const dimensionedScalar& rhoAir
         );
 
 
     // Member Functions
 
-        //- Update all incident fields for simulation time t
-        void update(const scalar t);
+        //- HOS target alphaH = clamp(0.5 - (z - eta)/delta, 0, 1) at cell
+        //  centres for time t (relaxation target, initial alphaI)
+        volScalarField blendAlpha(const scalar t) const;
+
+        //- Update all blended incident fields for time t, blended with the
+        //  advected incident fraction alphaI (cells, then faces with alphaIf
+        //  = linear interpolation of alphaI)
+        void update(const scalar t, const volScalarField& alphaI);
 
         //- Accessors
         const volVectorField& UInc() const { return UInc_; }
         const volScalarField& pInc() const { return pInc_; }
-        const volScalarField& alphaInc() const { return alphaInc_; }
         const surfaceVectorField& UfInc() const { return UfInc_; }
         const surfaceScalarField& pfInc() const { return pfInc_; }
-        const scalarField& cellWater() const { return cellWater_; }
+
 };
 
 
