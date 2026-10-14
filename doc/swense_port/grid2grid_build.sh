@@ -18,7 +18,7 @@ source /etc/profile.d/modules.sh
 module load OpenFoam/v2412/gcc-12.4.0-binutils-2.42-openmpi-5.0.7
 
 # FFTW of the cluster module (gcc 12.4). Its lib directory is also the RPATH.
-FFTW_LIB=/appl9/fftw/3.3.10-openmpi-5.0.6-gcc-12.4.0/EPYC9354/gcc-12.4.0/lib
+FFTW_LIB=/usr/lib64   # system FFTW: Fortran interface present, portable (no AVX-512)
 INSTALL=$FOAM_USER_LIBBIN
 
 rm -rf "$SCRATCH" && mkdir -p "$SCRATCH/mod" "$SCRATCH/lib"

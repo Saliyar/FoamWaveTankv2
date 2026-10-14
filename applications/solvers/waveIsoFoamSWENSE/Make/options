@@ -39,7 +39,4 @@ EXE_LIBS = \
     -L$(WAVES_LIBBIN) \
     -lwaves2Foam \
     -lswenseWaveTank \
-    -Wl,--disable-new-dtags \
-    -Wl,-rpath,/appl9/fftw/3.3.10-openmpi-5.0.6-gcc-12.4.0/EPYC9354/gcc-12.4.0/lib \
-    -L/appl9/fftw/3.3.10-openmpi-5.0.6-gcc-12.4.0/EPYC9354/gcc-12.4.0/lib \
-    -lfftw3
+    -Wl,--unresolved-symbols=ignore-in-shared-libs   # FFTW comes from libGrid2Grid.so (RPATH /usr/lib64)

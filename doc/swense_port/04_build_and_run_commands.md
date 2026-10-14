@@ -12,16 +12,21 @@ module load OpenFoam/v2412/gcc-12.4.0-binutils-2.42-openmpi-5.0.7
 source /zhome/19/7/191420/OpenFOAM/sitali-v2412/FoamWaveTankv2/bin/bashrc x
 ```
 
-FFTW: the cluster module `fftw3/3.3.10-openmpi-5.0.6-gcc-12.4.0` (the only
-gcc 12.4 FFTW) cannot be loaded together with the OpenFOAM module above, because
-it requires mpi/5.0.6 and OpenFOAM loads mpi/5.0.7. The module's FFTW library has
-no MPI dependency (ldd shows only libc and libm), and it exports the Fortran
-interface (dfftw_*). So its library directory
-`/appl9/fftw/3.3.10-openmpi-5.0.6-gcc-12.4.0/EPYC9354/gcc-12.4.0/lib` is used
-directly, as RPATH (`-Wl,--disable-new-dtags -Wl,-rpath,<dir>`) in libGrid2Grid.so
-and in each solver. No `LD_LIBRARY_PATH` change is needed. The OpenFOAM module
-puts the ThirdParty FFTW (without Fortran symbols) on LD_LIBRARY_PATH; the RPATH
-(DT_RPATH) takes precedence over it.
+FFTW: the system library `/usr/lib64/libfftw3.so.3` is used (decided with Sithik).
+The cluster module `fftw3/3.3.10-openmpi-5.0.6-gcc-12.4.0` could not be used: it
+requires mpi/5.0.6 (OpenFOAM loads 5.0.7), and its library contains AVX-512 code
+that crashes on the XeonE5-2660v3 nodes. The system build exports the Fortran
+interface (dfftw_*) and contains no AVX-512 instructions. libGrid2Grid.so carries
+`/usr/lib64` as RPATH (`-Wl,--disable-new-dtags -Wl,-rpath,/usr/lib64`), so no
+LD_LIBRARY_PATH change is needed. The solvers do not link FFTW directly; they get it
+through libGrid2Grid.so (`-Wl,--unresolved-symbols=ignore-in-shared-libs`), so the
+ThirdParty FFTW on LD_LIBRARY_PATH is never loaded.
+
+Portable build: the OpenFOAM module sets `-march=native` (login-node CPU). The
+environment used for builds overrides FOAM_EXTRA_CXXFLAGS with `-march=x86-64-v3`,
+which runs on the XeonE5-2660v3 and EPYC nodes. Checked: libwaves2Foam,
+libwaves2FoamSampling, libswenseWaveTank, libGrid2Grid and both solvers contain no
+AVX-512 instructions (objdump).
 
 ## 2. Grid2Grid for v2412 (done once; re-run only if the library is lost)
 

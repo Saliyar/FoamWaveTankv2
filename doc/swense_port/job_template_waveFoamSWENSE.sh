@@ -2,11 +2,12 @@
 ### General options (same style as the reference case)
 #BSUB -J fwt_swense_waveFoamSWENSE
 #BSUB -n 16
-#BSUB -R "span[ptile=4]"
+#BSUB -R "select[model==EPYC9354] span[ptile=4]"
 #BSUB -W 4:00
 #BSUB -o Output_%J.out
 #BSUB -e Error_%J.err
 
+# Node model: binaries are built with -march=native on EPYC9354 (login node), so the job must run on EPYC9354 nodes
 # Load modules: v2412 OpenFOAM (gcc 12.4 toolchain, matches the FFTW build below)
 module purge
 module load OpenFoam/v2412/gcc-12.4.0-binutils-2.42-openmpi-5.0.7
