@@ -117,7 +117,7 @@ surfaceScalarField ghf("ghf", (g & mesh.Cf()) - ghRef);
 volScalarField p
 (
     IOobject("p", runTime.timeName(), mesh,
-        IOobject::NO_READ, IOobject::NO_WRITE),
+        IOobject::NO_READ, IOobject::AUTO_WRITE),
     pc + pStar
 );
 
