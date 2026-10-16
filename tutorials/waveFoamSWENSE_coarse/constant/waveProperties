@@ -1,0 +1,77 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| Translated from Generaltesting_order3 for FoamWaveTankv2 (waveFoamSWENSE).   |
+| Values are the reference values; only the key names and the Grid2Grid sign  |
+| conventions differ (see README.md in this case).                           |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      waveProperties;
+}
+
+// Grid2Grid external forcing (waves2Foam), as the reference HOS wave
+externalForcing Grid2Grid;
+
+seaLevel        0;
+
+Grid2GridCoeffs
+{
+    Grid2GridInputFileName  Grid2Grid.dict;
+
+    // Grid2Grid time is t + referenceTime; the reference wave time is
+    // t - refTime with refTime = 0, so referenceTime = -0 = 0.
+    referenceTime       0;
+
+    // reference refPosition (-16.95 -14.84 0)
+    referencePosition   (-16.95 -14.84 0);
+
+    // Grid2Grid frame is R(referenceTheta) (x - referencePosition);
+    // reference refDirection (1 0 0): referenceTheta = -angle = 0
+    referenceTheta      0;
+
+    // The SWENSE path needs the dynamic pressure without soft start
+    Tsoft               0;
+}
+
+// Relaxation zone and Air2Air, as the reference farfieldCoeffs
+farfieldCoeffs
+{
+    zCutOff             0.5;
+
+    relaxationZone
+    {
+        farfieldPatchNames  (inlet outlet);
+        farfieldDistances   (8.76 8.76);
+        blendingDistances   (8.76 8.76);
+        spatialExponent     3.5;
+    }
+
+    Air2Air
+    {
+        Ha              2.0;
+        order           3;
+        pressureModel   linear;
+        verbose         yes;
+        cutoff          auto;
+        cutoffC         1;
+        modesFile       "constant/modes_HOS_SWENSE_clean.dat";
+        rhoAir          1;
+    }
+}
+
+// Boundary wave blocks: rampTime must be 0 (no ramp in the SWENSE BCs)
+inletCoeffs
+{
+    rampTime    0;
+    wind        (0 0 0);
+}
+
+outletCoeffs
+{
+    rampTime    0;
+    wind        (0 0 0);
+}
+
+// ************************************************************************* //
