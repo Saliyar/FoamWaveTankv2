@@ -12,6 +12,8 @@
 #include <cstdlib>
 #include <algorithm>
 #include <limits>
+#include <map>
+#include <utility>
 
 namespace
 {
@@ -512,7 +514,9 @@ void Air2AirEnhanced::evaluate
         FatalErrorInFunction << "Air2AirEnhanced: call update(t) first" << exit(FatalError);
     }
     // cos/sin of multiples by recurrence
-    std::vector<scalar> cx(Mx_), sx(Mx_), cy(My_), sy(My_);
+    cx_.resize(Mx_); sx_.resize(Mx_); cy_.resize(My_); sy_.resize(My_);
+    std::vector<scalar>& cx = cx_; std::vector<scalar>& sx = sx_;
+    std::vector<scalar>& cy = cy_; std::vector<scalar>& sy = sy_;
     const scalar ax = M_PI*xs/xlen_, ca = std::cos(ax), sa = std::sin(ax);
     cx[0] = 1; sx[0] = 0;
     for (int m = 1; m < Mx_; ++m)
@@ -585,6 +589,182 @@ void Air2AirEnhanced::flow(scalar x, scalar y, scalar z, vector& U, scalar& Pd) 
     const scalar Us = std::sqrt(g_*h_);
     U = vector(u*Us, v*Us, w*Us);
     Pd = -rhoAir_*g_*h_*phit;
+    if (bernoulli_) Pd -= 0.5*rhoAir_*g_*h_*(u*u + v*v + w*w);
+}
+
+
+// * * * * * * * * * * * * * * Tables for fixed points * * * * * * * * * * * * //
+
+namespace
+{
+    // Rows of the distinct values; values that agree to 1e-14 m share a row
+    // (points of one column differ by round-off only)
+    void distinctRows
+    (
+        const scalarList& v,
+        labelList& idx,
+        std::vector<scalar>& rows
+    )
+    {
+        std::map<long long, label> seen;
+        idx.setSize(v.size());
+        rows.clear();
+
+        forAll(v, i)
+        {
+            const long long key = std::llround(v[i]*1e14);
+            auto it = seen.find(key);
+
+            if (it == seen.end())
+            {
+                it = seen.insert(std::make_pair(key, label(rows.size()))).first;
+                rows.push_back(v[i]);
+            }
+
+            idx[i] = it->second;
+        }
+    }
+}
+
+
+void Air2AirEnhanced::buildTables
+(
+    const scalarList& x,
+    const scalarList& y,
+    const scalarList& z,
+    labelList& ix,
+    labelList& iy,
+    labelList& iz
+) const
+{
+    labelList ixd, iyd, izd;
+    std::vector<scalar> xd, yd, zd;
+    distinctRows(x, ixd, xd);
+    distinctRows(y, iyd, yd);
+    distinctRows(z, izd, zd);
+
+    // Nondimensional rows, as evaluate() receives them (x/h, y/h, z/h)
+    for (scalar& v : xd) v /= h_;
+    for (scalar& v : yd) v /= h_;
+    for (scalar& v : zd) v /= h_;
+
+    ix = ixd;
+    iy = iyd;
+    iz = izd;
+
+    // Kept modes in the order of evaluate(): m outer, n inner
+    kept_.clear();
+    for (int m = 0; m < Mx_; ++m)
+    {
+        const scalar kx = m*M_PI/xlen_;
+
+        for (int n = 0; n < My_; ++n)
+        {
+            const int q = m*My_ + n;
+
+            if (q == 0 || !keep_[q]) continue;
+
+            const scalar ky = (My_ > 1) ? n*M_PI/ylen_ : 0.0;
+            kept_.push_back({m, n, q, kx, ky, std::sqrt(kx*kx + ky*ky)});
+        }
+    }
+
+    const label K = kept_.size();
+
+    // cos(m ax), sin(m ax) per x row; cos(n ay), sin(n ay) per y row
+    cxT_.assign(xd.size()*Mx_, 0.0);
+    sxT_.assign(xd.size()*Mx_, 0.0);
+
+    forAll(xd, r)
+    {
+        const scalar ax = M_PI*xd[r]/xlen_;
+        for (int m = 0; m < Mx_; ++m)
+        {
+            cxT_[r*Mx_ + m] = std::cos(m*ax);
+            sxT_[r*Mx_ + m] = std::sin(m*ax);
+        }
+    }
+
+    cyT_.assign(yd.size()*My_, 0.0);
+    syT_.assign(yd.size()*My_, 0.0);
+
+    forAll(yd, r)
+    {
+        const scalar ay = (My_ > 1) ? M_PI*yd[r]/ylen_ : 0.0;
+        for (int n = 0; n < My_; ++n)
+        {
+            cyT_[r*My_ + n] = std::cos(n*ay);
+            syT_[r*My_ + n] = std::sin(n*ay);
+        }
+    }
+
+    // exp(-k z) per z row and kept mode; -1 where the cut-off kz > 700 applies
+    EzT_.assign(zd.size()*K, -1.0);
+
+    forAll(zd, r)
+    {
+        for (label j = 0; j < K; ++j)
+        {
+            const scalar kz = kept_[j].k*zd[r];
+
+            if (kz <= 700)
+            {
+                EzT_[r*K + j] = std::exp(-kz);
+            }
+        }
+    }
+
+    xT_ = xd;
+    yT_ = yd;
+    zT_ = zd;
+}
+
+
+void Air2AirEnhanced::flowTables
+(
+    label ix,
+    label iy,
+    label iz,
+    vector& U,
+    scalar& Pd
+) const
+{
+    if (!updated_)
+    {
+        FatalErrorInFunction << "Air2AirEnhanced: call update(t) first" << exit(FatalError);
+    }
+
+    const label K = kept_.size();
+    const scalar zs = zT_[iz];
+
+    // Same sums and operation order as evaluate()
+    scalar u = 0, v = 0, w = w0_, phi = w0_*zs, phit = w0t_*zs;
+
+    for (label j = 0; j < K; ++j)
+    {
+        const KeptMode& km = kept_[j];
+        const scalar E = EzT_[iz*K + j];
+
+        if (E < 0) continue;
+
+        const scalar cxm = cxT_[ix*Mx_ + km.m];
+        const scalar sxm = sxT_[ix*Mx_ + km.m];
+        const scalar cyn = cyT_[iy*My_ + km.n];
+        const scalar syn = syT_[iy*My_ + km.n];
+        const scalar cc = cxm*cyn;
+        const scalar A = A_[km.q];
+
+        u -= km.kx*A*sxm*cyn*E;
+        v -= km.ky*A*cxm*syn*E;
+        w -= km.k*A*cc*E;
+        phi += A*cc*E;
+        phit += At_[km.q]*cc*E;
+    }
+
+    const scalar Us = std::sqrt(g_*h_);
+    U = vector(u*Us, v*Us, w*Us);
+    Pd = -rhoAir_*g_*h_*phit;
+
     if (bernoulli_) Pd -= 0.5*rhoAir_*g_*h_*(u*u + v*v + w*w);
 }
 

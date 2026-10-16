@@ -52,6 +52,7 @@ SourceFiles
 #include "Air2AirWrapper.H"
 #include "surfaceInterpolate.H"
 #include "fvc.H"
+#include "Grid2Grid.H"
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -90,6 +91,23 @@ class swenseIncident
         //  interface (document Rev4, 16.3 rule 5)
         scalar guard_;
 
+        // Point tables (see buildPointTables)
+        pointField pts_;
+        label offCb_, offCf_, offCfb_;
+        labelList etaIdx_;          // per flat point: row of its distinct (x, y)
+        pointField etaPts_;         // per row: (x, y, 0)
+        scalarField etaVal_;        // per row: eta at time etaTime_
+        scalar etaTime_;
+        labelList airIx_, airIy_, airIz_;   // per flat point: Air2Air table rows
+
+        //- [option A] Grid2Grid wrapper (null unless the external forcing is Grid2Grid)
+        const waveTheories::Grid2Grid* g2g_;
+
+        //- [option A] Grid2Grid values at all flat points for the current step
+        bool fastEval_;
+        scalarField etaPt_, pExPt_;
+        vectorField UPt_;
+
         //- Air density (Air2Air pressure is linear in it; hydrostatic -rho_a g z)
         const scalar rhoAir_;
 
@@ -114,9 +132,9 @@ class swenseIncident
         vector waterU(const point& x, const scalar t) const;
         scalar waterP(const point& x, const scalar t) const;
 
-        //- Air velocity and pressure (mesh frame)
-        vector airU(const point& x) const;
-        scalar airP(const point& x) const;
+        //- Air velocity (mesh frame) and pressure at flat point ip, from the
+        //  Air2Air tables (one evaluation for both)
+        vector airUP(const label ip, scalar& p) const;
 
         //- Weights of the water and air parts at x for the advected alphaI
         //  (document Rev3 16.3.5): W = clamp((alphaI - eps)/(1 - 2 eps), 0, 1),
@@ -126,15 +144,31 @@ class swenseIncident
         void weights
         (
             const point& x,
-            const scalar t,
+            const scalar eta,
             const scalar alphaI,
             scalar& wWater,
             scalar& wAir
         ) const;
 
-        //- Blended velocity and pressure at x for the advected alphaI
-        vector blendU(const point& x, const scalar t, const scalar alphaI) const;
-        scalar blendP(const point& x, const scalar t, const scalar alphaI) const;
+        //- Grid2Grid eta at flat point ip: the per-step value when it is
+        //  current for time t, otherwise evaluated here
+        scalar etaAt(const label ip, const scalar t) const;
+
+        //- Blended velocity u and pressure p at flat point ip for the advected
+        //  alphaI (weights evaluated once for both)
+        void blendUP
+        (
+            const label ip,
+            const scalar t,
+            const scalar alphaI,
+            vector& u,
+            scalar& p
+        ) const;
+
+        //- Point tables of the mesh: flat order cells, boundary cells, faces,
+        //  boundary faces (the order of the update loops), distinct (x, y) for
+        //  eta and distinct x, y, z for the Air2Air tables
+        void buildPointTables();
 
         //- Disallow default bitwise copy
         swenseIncident(const swenseIncident&);

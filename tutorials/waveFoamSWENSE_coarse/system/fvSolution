@@ -116,7 +116,7 @@ PIMPLE
     momentumPredictor   yes;
     fsiTol              1e-3;
     fsiMaxIter          21;
-    nOuterCorrectors    8;
+    nOuterCorrectors    1;
     nCorrectors         3;
     nNonOrthogonalCorrector 0;
     correctPhi          no;

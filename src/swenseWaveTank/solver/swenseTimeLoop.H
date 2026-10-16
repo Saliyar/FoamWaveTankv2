@@ -1,6 +1,10 @@
 // Shared SWENSE time loop. The solver provides alphaStep.H, which advances
 // alpha1 and alphaI with the same function call in every outer corrector.
 
+// Per-bin budget logging switch (default off)
+const bool budgetLog =
+    runTime.controlDict().lookupOrDefault<bool>("budgetLog", false);
+
 while (runTime.run())
 {
     runTime++;
@@ -14,6 +18,7 @@ while (runTime.run())
     // value at the start of this step (document Rev1, 16.3.5). The HOS target
     // alphaH is the relaxation target of both volume fractions (16.3.3).
     incident.update(runTime.value(), alphaI);
+
     alphaH.primitiveFieldRef() =
         incident.blendAlpha(runTime.value()).primitiveField();
 
@@ -54,8 +59,12 @@ while (runTime.run())
         << "  alphaI [" << min(alphaI).value() << ", "
         << max(alphaI).value() << "]" << endl;
 
-    // Logging only: per-bin alphaI budget (no effect on the solution)
-    #include "swenseBudgetLog.H"
+    // Logging only: per-bin alphaI budget (no effect on the solution).
+    // Off unless budgetLog true is set in controlDict.
+    if (budgetLog)
+    {
+        #include "swenseBudgetLog.H"
+    }
 
     // Relaxation of the complementary velocity in the zone
     Uc *= (1.0 - w);

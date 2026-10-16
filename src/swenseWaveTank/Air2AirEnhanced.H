@@ -30,6 +30,8 @@
 #define Air2AirEnhanced_H
 
 #include "dictionary.H"
+#include "scalarList.H"
+#include "labelList.H"
 #include "vector.H"
 
 #include <vector>
@@ -71,6 +73,14 @@ class Air2AirEnhanced
     mutable bool printed_;
     scalar w0_, w0t_;
     std::vector<scalar> A_, At_;
+    mutable std::vector<scalar> cx_, sx_, cy_, sy_;   // evaluate() scratch
+
+    // Tables of buildTables(): modes kept by the cut-off, and per distinct row
+    struct KeptMode { int m, n, q; scalar kx, ky, k; };
+    mutable std::vector<KeptMode> kept_;
+    mutable std::vector<scalar> xT_, yT_, zT_;                 // nondimensional rows
+    mutable std::vector<scalar> cxT_, sxT_, cyT_, syT_;        // [row][m] and [row][n]
+    mutable std::vector<scalar> EzT_;                          // [row][kept], < 0 if cut
     bool updated_;
 
     // Helpers
@@ -114,6 +124,24 @@ public:
     scalar potential(scalar x, scalar y, scalar z) const;
 
     void flow(scalar x, scalar y, scalar z, vector& U, scalar& Pd) const;
+
+    //- Tables for a fixed point set (static mesh). x, y, z are dimensional [m]
+    //  (z from the mean water level). Distinct values get one table row each;
+    //  ix, iy, iz give each point's row. Trig and exp are tabulated per distinct
+    //  x, y, z; the time-dependent coefficients stay in A_, At_ (update(t))
+    void buildTables
+    (
+        const scalarList& x,
+        const scalarList& y,
+        const scalarList& z,
+        labelList& ix,
+        labelList& iy,
+        labelList& iz
+    ) const;
+
+    //- Same sums as flow(), with trig and exp read from the tables of
+    //  buildTables(). Rows ix, iy, iz as returned by buildTables()
+    void flowTables(label ix, label iy, label iz, vector& U, scalar& Pd) const;
 
     int getNt() const { return nt_; }
     scalar getDt() const { return dt_*std::sqrt(h_/g_); }   // [s]

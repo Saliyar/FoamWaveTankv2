@@ -4,6 +4,12 @@
 #include "swenseIncident.H"
 #include "IOdictionary.H"
 #include "gravityMeshObject.H"
+#include "Grid2Grid.H"
+
+#include <cmath>
+#include <map>
+#include <utility>
+#include <vector>
 
 // * * * * * * * * * * * * * * * * Static Member Functions  * * * * * * * * * //
 
@@ -164,10 +170,124 @@ Foam::swenseIncident::swenseIncident
                 << exit(FatalError);
         }
     }
+
+    g2g_ = dynamic_cast<const waveTheories::Grid2Grid*>(&ext_);
+    fastEval_ = false;
+
+    buildPointTables();
+
+    if (g2g_)
+    {
+        // [option A] stored spline basis of all points, once
+        g2g_->setupPoints(pts_);
+        etaPt_.setSize(pts_.size(), 0.0);
+        pExPt_.setSize(pts_.size(), 0.0);
+        UPt_.setSize(pts_.size(), vector::zero);
+    }
 }
 
 
 // * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
+
+void Foam::swenseIncident::buildPointTables()
+{
+    const volVectorField& C = mesh_.C();
+    const surfaceVectorField& Cf = mesh_.Cf();
+
+    // Flat point list in the order of the update loops
+    std::vector<point> pts;
+
+    forAll(C, celli)
+    {
+        pts.push_back(C[celli]);
+    }
+
+    offCb_ = label(pts.size());
+
+    forAll(C.boundaryField(), patchi)
+    {
+        forAll(C.boundaryField()[patchi], facei)
+        {
+            pts.push_back(C.boundaryField()[patchi][facei]);
+        }
+    }
+
+    offCf_ = label(pts.size());
+
+    forAll(Cf, facei)
+    {
+        pts.push_back(Cf[facei]);
+    }
+
+    offCfb_ = label(pts.size());
+
+    forAll(Cf.boundaryField(), patchi)
+    {
+        forAll(Cf.boundaryField()[patchi], facei)
+        {
+            pts.push_back(Cf.boundaryField()[patchi][facei]);
+        }
+    }
+
+    const label n = label(pts.size());
+
+    pts_.setSize(n);
+    forAll(pts_, ip)
+    {
+        pts_[ip] = pts[ip];
+    }
+
+    // Grid2Grid eta depends on (x, y) only: one row per distinct (x, y)
+    std::map<std::pair<long long, long long>, label> rowOf;
+    std::vector<point> etaRows;
+
+    etaIdx_.setSize(n);
+    forAll(pts_, ip)
+    {
+        const std::pair<long long, long long> key
+        (
+            std::llround(pts_[ip].x()*1e14), std::llround(pts_[ip].y()*1e14)
+        );
+
+        auto it = rowOf.find(key);
+
+        if (it == rowOf.end())
+        {
+            it = rowOf.insert(std::make_pair(key, label(etaRows.size()))).first;
+            etaRows.push_back(point(pts_[ip].x(), pts_[ip].y(), 0.0));
+        }
+
+        etaIdx_[ip] = it->second;
+    }
+
+    etaPts_.setSize(etaRows.size());
+    forAll(etaPts_, r)
+    {
+        etaPts_[r] = etaRows[r];
+    }
+
+    etaVal_.setSize(etaRows.size(), 0.0);
+    etaTime_ = -GREAT;
+
+    Info<< "SWENSE point tables: " << n << " points, " << etaRows.size()
+        << " distinct (x, y) for eta" << endl;
+
+    if (air_.valid())
+    {
+        scalarList xs(n), ys(n), zs(n);
+
+        forAll(pts_, ip)
+        {
+            const vector xw = toWave(pts_[ip] - refPos_);
+            xs[ip] = xw.x();
+            ys[ip] = xw.y();
+            zs[ip] = pts_[ip].z() - seaLevel_;
+        }
+
+        air_->solver().buildTables(xs, ys, zs, airIx_, airIy_, airIz_);
+    }
+}
+
 
 Foam::vector Foam::swenseIncident::toWave(const vector& x) const
 {
@@ -213,43 +333,48 @@ Foam::scalar Foam::swenseIncident::waterP
 }
 
 
-Foam::vector Foam::swenseIncident::airU(const point& x) const
+Foam::vector Foam::swenseIncident::airUP
+(
+    const label ip,
+    scalar& p
+) const
 {
-    // No Air2Air block: still air (the calm-water test of document 16.4)
+    // Full air field (document eq. 5.2): Air2Air part plus hydrostatic
+    // -rho_a g z_w, from the Air2Air tables. Without an Air2Air block the
+    // air is at rest: only the hydrostatic part
+    const scalar zw = (pts_[ip] - refPos_).z();
+
     if (!air_.valid())
     {
+        p = -rhoAir_*magG_*zw;
         return vector::zero;
     }
 
-    const vector xw = toWave(x - refPos_);
+    vector Uw;
+    scalar Pd;
+    air_->solver().flowTables(airIx_[ip], airIy_[ip], airIz_[ip], Uw, Pd);
 
-    return toMesh(air_->velocity(xw.x(), xw.y(), x.z() - seaLevel_));
+    p = Pd - rhoAir_*magG_*zw;
+
+    return toMesh(Uw);
 }
 
 
-Foam::scalar Foam::swenseIncident::airP(const point& x) const
+Foam::scalar Foam::swenseIncident::etaAt(const label ip, const scalar t) const
 {
-    // Full air pressure (document eq. 5.2): Air2Air part plus hydrostatic
-    // -rho_a g z_w, with the same height as the water hydrostatic term.
-    // Without an Air2Air block the air is at rest: only the hydrostatic part
-    const scalar zw = (x - refPos_).z();
-
-    if (!air_.valid())
+    if (etaTime_ == t)
     {
-        return -rhoAir_*magG_*zw;
+        return fastEval_ ? etaPt_[ip] : etaVal_[etaIdx_[ip]];
     }
 
-    const vector xw = toWave(x - refPos_);
-
-    return air_->pressure(xw.x(), xw.y(), x.z() - seaLevel_)
-         - rhoAir_*magG_*zw;
+    return ext_.eta(pts_[ip], t);
 }
 
 
 void Foam::swenseIncident::weights
 (
     const point& x,
-    const scalar t,
+    const scalar eta,
     const scalar alphaI,
     scalar& wWater,
     scalar& wAir
@@ -258,7 +383,7 @@ void Foam::swenseIncident::weights
     const scalar eps = 1e-6;
     const scalar W = min(max((alphaI - eps)/(1.0 - 2.0*eps), scalar(0)), scalar(1));
 
-    const scalar zRel = x.z() - ext_.eta(x, t);
+    const scalar zRel = x.z() - eta;
 
     const bool evalWater = (W > 0) && (zRel <= guard_);
     const bool evalAir = (W < 1) && (zRel >= -guard_);
@@ -285,55 +410,46 @@ void Foam::swenseIncident::weights
 }
 
 
-Foam::vector Foam::swenseIncident::blendU
+void Foam::swenseIncident::blendUP
 (
-    const point& x,
+    const label ip,
     const scalar t,
-    const scalar alphaI
+    const scalar alphaI,
+    vector& u,
+    scalar& p
 ) const
 {
-    scalar wWater, wAir;
-    weights(x, t, alphaI, wWater, wAir);
+    const point& x = pts_[ip];
 
-    vector u(Zero);
+    // Weights once per point, shared by the velocity and the pressure
+    scalar wWater, wAir;
+    weights(x, etaAt(ip, t), alphaI, wWater, wAir);
+
+    u = Zero;
+    p = 0.0;
 
     if (wWater > 0)
     {
-        u += wWater*waterU(x, t);
+        if (fastEval_)
+        {
+            // [option A] same values as waterU() and waterP()
+            u += wWater*UPt_[ip];
+            p += wWater*(rhoWater_*(pExPt_[ip] - magG_*(x - refPos_).z()));
+        }
+        else
+        {
+            u += wWater*waterU(x, t);
+            p += wWater*waterP(x, t);
+        }
     }
 
     if (wAir > 0)
     {
-        u += wAir*airU(x);
+        scalar pa;
+        const vector Ua = airUP(ip, pa);
+        u += wAir*Ua;
+        p += wAir*pa;
     }
-
-    return u;
-}
-
-
-Foam::scalar Foam::swenseIncident::blendP
-(
-    const point& x,
-    const scalar t,
-    const scalar alphaI
-) const
-{
-    scalar wWater, wAir;
-    weights(x, t, alphaI, wWater, wAir);
-
-    scalar p = 0.0;
-
-    if (wWater > 0)
-    {
-        p += wWater*waterP(x, t);
-    }
-
-    if (wAir > 0)
-    {
-        p += wAir*airP(x);
-    }
-
-    return p;
 }
 
 
@@ -351,22 +467,21 @@ Foam::volScalarField Foam::swenseIncident::blendAlpha(const scalar t) const
 
     forAll(C, celli)
     {
-        const point& x = C[celli];
-
-        alpha[celli] = blendWeight(x.z() - ext_.eta(x, t), delta_);
+        alpha[celli] = blendWeight(C[celli].z() - etaAt(celli, t), delta_);
     }
 
     // Boundary faces: the same target at the face centres
     const surfaceVectorField::Boundary& Cfb = mesh_.Cf().boundaryField();
 
+    label ip = offCfb_;
+
     forAll(Cfb, patchi)
     {
         forAll(Cfb[patchi], facei)
         {
-            const point& x = Cfb[patchi][facei];
-
             alpha.boundaryFieldRef()[patchi][facei] =
-                blendWeight(x.z() - ext_.eta(x, t), delta_);
+                blendWeight(Cfb[patchi][facei].z() - etaAt(ip, t), delta_);
+            ++ip;
         }
     }
 
@@ -388,43 +503,68 @@ void Foam::swenseIncident::update
         air_->update(tAir);
     }
 
+    if (g2g_)
+    {
+        // [option A] Grid2Grid eta, U and pExcess at all stored points, once per step
+        g2g_->evaluatePoints(t, etaPt_, UPt_, pExPt_);
+        fastEval_ = true;
+    }
+    else
+    {
+        // Grid2Grid eta once per distinct (x, y) for this time (used by all points)
+        fastEval_ = false;
+        forAll(etaPts_, r)
+        {
+            etaVal_[r] = ext_.eta(etaPts_[r], t);
+        }
+    }
+    etaTime_ = t;
+
     // Cells: blend with the advected alphaI (clamped to [0, 1])
     const volVectorField& C = mesh_.C();
 
     forAll(C, celli)
     {
-        const point& x = C[celli];
-        UInc_[celli] = blendU(x, t, alphaI[celli]);
-        pInc_[celli] = blendP(x, t, alphaI[celli]);
+        blendUP(celli, t, alphaI[celli], UInc_[celli], pInc_[celli]);
     }
 
     // Boundary patches of the cell fields: same blend, patch centres
+    label ip = offCb_;
+
     forAll(C.boundaryField(), patchi)
     {
-        const vectorField& Cb = C.boundaryField()[patchi];
         const scalarField& ab = alphaI.boundaryField()[patchi];
 
-        forAll(Cb, facei)
+        forAll(ab, facei)
         {
-            UInc_.boundaryFieldRef()[patchi][facei] = blendU(Cb[facei], t, ab[facei]);
-            pInc_.boundaryFieldRef()[patchi][facei] = blendP(Cb[facei], t, ab[facei]);
+            blendUP
+            (
+                ip, t, ab[facei],
+                UInc_.boundaryFieldRef()[patchi][facei],
+                pInc_.boundaryFieldRef()[patchi][facei]
+            );
+            ++ip;
         }
     }
 
     // Faces: alphaIf is the linear interpolation of alphaI
     const surfaceScalarField alphaIf(fvc::interpolate(alphaI));
 
-    const vectorField& Cfi = mesh_.Cf().internalField();
     const scalarField& aif = alphaIf.internalField();
 
-    forAll(Cfi, facei)
+    forAll(aif, facei)
     {
-        const point& x = Cfi[facei];
-        UfInc_.primitiveFieldRef()[facei] = blendU(x, t, aif[facei]);
-        pfInc_.primitiveFieldRef()[facei] = blendP(x, t, aif[facei]);
+        blendUP
+        (
+            offCf_ + facei, t, aif[facei],
+            UfInc_.primitiveFieldRef()[facei],
+            pfInc_.primitiveFieldRef()[facei]
+        );
     }
 
     const surfaceVectorField::Boundary& Cfb = mesh_.Cf().boundaryField();
+
+    ip = offCfb_;
 
     forAll(Cfb, patchi)
     {
@@ -432,11 +572,16 @@ void Foam::swenseIncident::update
 
         forAll(Cfb[patchi], facei)
         {
-            const point& x = Cfb[patchi][facei];
-            UfInc_.boundaryFieldRef()[patchi][facei] = blendU(x, t, ab[facei]);
-            pfInc_.boundaryFieldRef()[patchi][facei] = blendP(x, t, ab[facei]);
+            blendUP
+            (
+                ip, t, ab[facei],
+                UfInc_.boundaryFieldRef()[patchi][facei],
+                pfInc_.boundaryFieldRef()[patchi][facei]
+            );
+            ++ip;
         }
     }
+
 }
 
 // ************************************************************************* //
