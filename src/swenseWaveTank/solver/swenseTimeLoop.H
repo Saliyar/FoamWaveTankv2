@@ -54,6 +54,9 @@ while (runTime.run())
         << "  alphaI [" << min(alphaI).value() << ", "
         << max(alphaI).value() << "]" << endl;
 
+    // Logging only: per-bin alphaI budget (no effect on the solution)
+    #include "swenseBudgetLog.H"
+
     // Relaxation of the complementary velocity in the zone
     Uc *= (1.0 - w);
     Uc.correctBoundaryConditions();
