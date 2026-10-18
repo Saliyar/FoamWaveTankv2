@@ -106,6 +106,10 @@ class swenseIncident
         //- [option A] Grid2Grid values at all flat points for the current step
         bool fastEval_;
         scalarField etaPt_, pExPt_;
+        // Scratch fix: per-row surface pressures (water, air) at (x, y, eta_r),
+        // and one flat point per row to read eta_r
+        scalarField pWs_, pAs_;
+        labelList rowPt_;
         vectorField UPt_;
 
         //- Air density (Air2Air pressure is linear in it; hydrostatic -rho_a g z)
@@ -119,6 +123,7 @@ class swenseIncident
         volScalarField pInc_;
         surfaceVectorField UfInc_;
         surfaceScalarField pfInc_;
+        surfaceScalarField psiWf_;
 
     // Private member functions
 
@@ -131,6 +136,9 @@ class swenseIncident
         //- Water velocity and pressure (mesh frame)
         vector waterU(const point& x, const scalar t) const;
         scalar waterP(const point& x, const scalar t) const;
+
+        //- psiWf value at flat point ip (scratch)
+        scalar psiWValue(const label ip, const scalar t) const;
 
         //- Air velocity (mesh frame) and pressure at flat point ip, from the
         //  Air2Air tables (one evaluation for both)
@@ -222,6 +230,9 @@ public:
         const volScalarField& pInc() const { return pInc_; }
         const surfaceVectorField& UfInc() const { return UfInc_; }
         const surfaceScalarField& pfInc() const { return pfInc_; }
+
+        //- Water pressure relative to the row surface value, per m2/s2 (scratch)
+        const surfaceScalarField& psiWf() const { return psiWf_; }
 
 };
 

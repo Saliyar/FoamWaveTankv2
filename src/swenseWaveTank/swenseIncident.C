@@ -129,6 +129,13 @@ Foam::swenseIncident::swenseIncident
             IOobject::NO_READ, IOobject::NO_WRITE),
         mesh,
         dimensionedScalar("pfInc", dimPressure, 0.0)
+    ),
+    psiWf_
+    (
+        IOobject("psiWf", mesh.time().timeName(), mesh,
+            IOobject::NO_READ, IOobject::NO_WRITE),
+        mesh,
+        dimensionedScalar("psiWf", dimVelocity*dimVelocity, 0.0)
     )
 {
     const dictionary& wp =
@@ -421,34 +428,56 @@ void Foam::swenseIncident::blendUP
 {
     const point& x = pts_[ip];
 
-    // Weights once per point, shared by the velocity and the pressure
+    // Weights once per point, used by the velocity only (scratch fix)
+    const scalar eta = etaAt(ip, t);
     scalar wWater, wAir;
-    weights(x, etaAt(ip, t), alphaI, wWater, wAir);
+    weights(x, eta, alphaI, wWater, wAir);
 
     u = Zero;
     p = 0.0;
+
+    scalar pa = 0.0;
+    bool havePa = false;
 
     if (wWater > 0)
     {
         if (fastEval_)
         {
-            // [option A] same values as waterU() and waterP()
             u += wWater*UPt_[ip];
-            p += wWater*(rhoWater_*(pExPt_[ip] - magG_*(x - refPos_).z()));
         }
         else
         {
             u += wWater*waterU(x, t);
-            p += wWater*waterP(x, t);
         }
     }
 
     if (wAir > 0)
     {
-        scalar pa;
         const vector Ua = airUP(ip, pa);
+        havePa = true;
         u += wAir*Ua;
-        p += wAir*pa;
+    }
+
+    // Pressure (scratch fix): one side only, relative to its value at the
+    // surface of this (x, y) row; only the side that is used is evaluated
+    const scalar zRel = x.z() - eta;
+    const label r = etaIdx_[ip];
+
+    if (zRel <= 0)
+    {
+        const scalar pW =
+            fastEval_
+          ? rhoWater_*(pExPt_[ip] - magG_*(x - refPos_).z())
+          : waterP(x, t);
+        p = pW - pWs_[r];
+    }
+    else
+    {
+        if (!havePa)
+        {
+            airUP(ip, pa);
+        }
+        p = pa - pAs_[r];
     }
 }
 
@@ -520,6 +549,42 @@ void Foam::swenseIncident::update
     }
     etaTime_ = t;
 
+    // Scratch fix: surface pressures once per step for every distinct (x, y) row
+    if (rowPt_.size() != etaPts_.size())
+    {
+        rowPt_.setSize(etaPts_.size());
+        rowPt_ = -1;
+        forAll(etaIdx_, ip)
+        {
+            if (rowPt_[etaIdx_[ip]] < 0)
+            {
+                rowPt_[etaIdx_[ip]] = ip;
+            }
+        }
+    }
+    pWs_.setSize(etaPts_.size());
+    pAs_.setSize(etaPts_.size());
+    forAll(etaPts_, r)
+    {
+        const point xs(etaPts_[r].x(), etaPts_[r].y(), etaAt(rowPt_[r], t));
+        const scalar zws = (xs - refPos_).z();
+
+        pWs_[r] = waterP(xs, t);
+
+        if (!air_.valid())
+        {
+            pAs_[r] = -rhoAir_*magG_*zws;
+        }
+        else
+        {
+            const vector xw = toWave(xs - refPos_);
+            vector Uw;
+            scalar Pd;
+            air_->solver().flow(xw.x(), xw.y(), xs.z() - seaLevel_, Uw, Pd);
+            pAs_[r] = Pd - rhoAir_*magG_*zws;
+        }
+    }
+
     // Cells: blend with the advected alphaI (clamped to [0, 1])
     const volVectorField& C = mesh_.C();
 
@@ -560,6 +625,7 @@ void Foam::swenseIncident::update
             UfInc_.primitiveFieldRef()[facei],
             pfInc_.primitiveFieldRef()[facei]
         );
+        psiWf_.primitiveFieldRef()[facei] = psiWValue(offCf_ + facei, t);
     }
 
     const surfaceVectorField::Boundary& Cfb = mesh_.Cf().boundaryField();
@@ -578,6 +644,7 @@ void Foam::swenseIncident::update
                 UfInc_.boundaryFieldRef()[patchi][facei],
                 pfInc_.boundaryFieldRef()[patchi][facei]
             );
+            psiWf_.boundaryFieldRef()[patchi][facei] = psiWValue(ip, t);
             ++ip;
         }
     }
@@ -585,3 +652,14 @@ void Foam::swenseIncident::update
 }
 
 // ************************************************************************* //
+
+
+// Scratch: psiWf = (pW(face) - pWs[row]) / rho1, water pressure relative to the row surface
+Foam::scalar Foam::swenseIncident::psiWValue(const label ip, const scalar t) const
+{
+    const scalar pw = fastEval_
+      ? rhoWater_*(pExPt_[ip] - magG_*(pts_[ip] - refPos_).z())
+      : waterP(pts_[ip], t);
+
+    return (pw - pWs_[etaIdx_[ip]])/rhoWater_;
+}
