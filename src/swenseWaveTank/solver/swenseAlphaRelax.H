@@ -8,6 +8,9 @@
 alpha1 = (1.0 - w)*alpha1 + w*alphaH;
 alphaI = (1.0 - w)*alphaI + w*alphaH;
 
+// Level correction of the incident surface toward the HOS level eta_H
+#include "swenseColumnLevel.H"
+
 rho == swenseRho(alpha1, rho1, rho2);
 rhoI == swenseRho(alphaI, rho1, rho2);
 rhoByRhoI == rho/rhoI;

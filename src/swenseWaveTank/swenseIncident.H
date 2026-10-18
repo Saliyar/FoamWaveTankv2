@@ -234,6 +234,10 @@ public:
         //- Water pressure relative to the row surface value, per m2/s2 (scratch)
         const surfaceScalarField& psiWf() const { return psiWf_; }
 
+        //- Surface rows (x, y, 0) and Grid2Grid eta of row r at time t
+        const pointField& etaPts() const { return etaPts_; }
+        scalar etaRow(const label r, const scalar t) const { return etaAt(rowPt_[r], t); }
+
 };
 
 

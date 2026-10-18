@@ -26,6 +26,36 @@ while (runTime.run())
     phiInc = incident.UfInc() & mesh.Sf();
     phi = phiComp + phiInc;
 
+    // Projection of phiInc: laplacian(psi) = div(phiInc), psi fixed to zero on
+    // the atmosphere patch and zero-gradient elsewhere; phiInc -= snGrad(psi) |Sf|.
+    // Switch: projectPhiI in controlDict (default on).
+    if (runTime.controlDict().lookupOrDefault<bool>("projectPhiI", true))
+    {
+        wordList psiTypes
+        (
+            mesh.boundaryMesh().size(),
+            zeroGradientFvPatchScalarField::typeName
+        );
+        forAll(mesh.boundaryMesh(), pI)
+        {
+            if (mesh.boundaryMesh()[pI].name() == "atmosphere")
+            {
+                psiTypes[pI] = fixedValueFvPatchScalarField::typeName;
+            }
+        }
+        volScalarField psiP
+        (
+            IOobject("psiProj", runTime.timeName(), mesh,
+                IOobject::NO_READ, IOobject::NO_WRITE),
+            mesh,
+            dimensionedScalar("psiProj", dimArea/dimTime, 0.0),
+            psiTypes
+        );
+        solve(fvm::laplacian(psiP) == fvc::div(phiInc));
+        phiInc -= fvc::snGrad(psiP)*mesh.magSf();
+        phi = phiComp + phiInc;
+    }
+
     while (pimple.loop())
     {
         // Alpha1 with phi and alphaI with phiInc, same function (16.3.2)
