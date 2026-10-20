@@ -20,14 +20,23 @@ Foam::swenseRelaxation::swenseRelaxation
             IOobject::NO_READ, IOobject::NO_WRITE),
         mesh,
         dimensionedScalar("swenseWeight", dimless, 0.0)
-    )
+    ),
+    dict_(dict)
 {
-    const wordList patchNames(dict.lookup("farfieldPatchNames"));
-    const scalarList farDist(dict.lookup("farfieldDistances"));
-    const scalarList blendDist(dict.lookup("blendingDistances"));
+    update();
+}
+
+
+// * * * * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * //
+
+void Foam::swenseRelaxation::update()
+{
+    const wordList patchNames(dict_.lookup("farfieldPatchNames"));
+    const scalarList farDist(dict_.lookup("farfieldDistances"));
+    const scalarList blendDist(dict_.lookup("blendingDistances"));
     const scalar spatialExp
     (
-        dict.lookupOrDefault<scalar>("spatialExponent", 3.5)
+        dict_.lookupOrDefault<scalar>("spatialExponent", 3.5)
     );
 
     if (patchNames.size() != farDist.size() || farDist.size() != blendDist.size())
@@ -37,25 +46,27 @@ Foam::swenseRelaxation::swenseRelaxation
             << "must have the same size" << exit(FatalError);
     }
 
-    scalarField s(mesh.nCells(), 0.0);
+    scalarField s(mesh_.nCells(), 0.0);
 
     forAll(patchNames, patchI)
     {
-        const label patchID = mesh.boundaryMesh().findPatchID(patchNames[patchI]);
+        const label patchID =
+            mesh_.boundaryMesh().findPatchID(patchNames[patchI]);
 
         if (patchID < 0)
         {
             FatalErrorInFunction
                 << "Cannot find patch " << patchNames[patchI] << nl
-                << "Available patch names: " << mesh.boundaryMesh().names()
+                << "Available patch names: " << mesh_.boundaryMesh().names()
                 << exit(FatalError);
         }
 
         labelHashSet patchIDs;
         patchIDs.insert(patchID);
 
-        // Distance of each cell from this patch (not corrected at walls)
-        patchWave waveDistance(mesh, patchIDs, false);
+        // Distance of each cell from this patch (not corrected at walls),
+        // on the current mesh: the zones follow the cells when the mesh moves
+        patchWave waveDistance(mesh_, patchIDs, false);
         const scalarField& d = waveDistance.distance();
 
         const scalar Dff = farDist[patchI];

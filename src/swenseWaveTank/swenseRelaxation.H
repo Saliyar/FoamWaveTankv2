@@ -47,6 +47,9 @@ class swenseRelaxation
         //- Relaxation weight, 0 in the interior, 1 in the farfield
         volScalarField w_;
 
+        //- Copy of the relaxation dictionary, used by update()
+        const dictionary dict_;
+
     // Private member functions
 
         //- Disallow default bitwise copy
@@ -65,6 +68,11 @@ public:
 
 
     // Member Functions
+
+        //- Recompute the weight from the current cell centres (after a mesh
+        //  motion). The zones are defined on the wave patches, so they follow
+        //  the cells; the field object is updated in place.
+        void update();
 
         //- Relaxation weight field
         const volScalarField& weight() const { return w_; }

@@ -24,7 +24,7 @@ DT=$(awk '$1=="deltaT"{print $2}' system/controlDict | tr -d ';')
 END=$(awk -v n=$N -v d=$DT 'BEGIN{printf "%.10g", n*d}')
 sed -i "s/^endTime .*/endTime         $END;/" system/controlDict
 sed -i "s/^writeControl .*/writeControl    timeStep;/" system/controlDict
-sed -i "s/^writeInterval .*/writeInterval   $N;/" system/controlDict
+sed -i "s/^writeInterval .*/writeInterval   ${WRITE_EVERY:-$N};/" system/controlDict
 
 # Tutorials without a mesh: blockMesh as their Allrun does; the HOS modes file
 # (not in the repository) is linked from MODES when it is missing
@@ -46,6 +46,62 @@ if [ -n "$FVSCHEMES" ]
 then
     cp $FVSCHEMES system/fvSchemes
 fi
+
+if [ "$MODE" = "sixdof" ]
+then
+    # Free floating body: OpenFOAM v2506 sixDoFRigidBodyMotion under
+    # dynamicMotionSolverFvMesh (box geometry measured from the mesh, see report)
+    cat > constant/dynamicMeshDict <<EOF
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      dynamicMeshDict;
+}
+
+dynamicFvMesh       dynamicMotionSolverFvMesh;
+
+motionSolverLibs    (sixDoFRigidBodyMotion);
+
+motionSolver        sixDoFRigidBodyMotion;
+
+updateControl       timeStep;
+updateInterval      1;
+
+patches             (boxFront boxBack boxBottom);
+innerDistance       0.3;
+outerDistance       1.0;
+
+mass                509.024;
+centreOfMass        (0 0 0.9033);
+momentOfInertia     (1549.36 213.33 1354.58);
+orientation         (1 0 0 0 1 0 0 0 1);
+angularMomentum     (0 0 0);
+g                   (0 0 -9.81);
+rho                 rho;
+report              on;
+
+solver
+{
+    type            symplectic;
+}
+
+constraints
+{
+    plane
+    {
+        sixDoFRigidBodyMotionConstraint plane;
+        normal          (0 1 0);
+        point           (0 0 0);
+    }
+}
+
+EOF
+fi
+
+if [ "$MODE" = "translate" ]; then cp /gpfs/hpc-home/projects/dtu_00075/apps/FoamWaveTank/wt_SWENSE_dynamic/diag/dynamic_mesh/scripts/translate.dynamicMeshDict.template constant/dynamicMeshDict; fi
+if [ "$MODE" = "sixdof" ]; then cp /gpfs/hpc-home/projects/dtu_00075/apps/FoamWaveTank/wt_SWENSE_dynamic/diag/dynamic_mesh/scripts/pointDisplacement.template 0/pointDisplacement; fi
 
 if [ "$MODE" = "static" ] || [ "$MODE" = "zero" ]
 then

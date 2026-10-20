@@ -70,6 +70,14 @@ void Foam::swenseAdvanceVoF
     // Restart every call from the old-time value (document Section 16.3.2)
     alpha = alpha.oldTime();
 
+    // Moving mesh: the old-time value is per unit volume of the old cell, so
+    // it is scaled to the current cell volume (V0/V, as the VoF alpha
+    // equation of OpenFOAM does). The same for alpha1 and alphaI.
+    if (mesh.moving())
+    {
+        alpha.primitiveFieldRef() *= mesh.Vsc0()/mesh.Vsc();
+    }
+
     // Compression coefficient, with the optional terms of alphaEqn.H
     surfaceScalarField phic(cAlpha*mag(phi/mesh.magSf()));
 

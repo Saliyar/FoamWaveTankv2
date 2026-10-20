@@ -34,7 +34,8 @@ while (runTime.run())
                     meshPhi = mesh.phi();
                     incident.movePoints();
 
-                    #include "swenseZoneCheck.H"
+                    // Relaxation zones follow the mesh (spec item 8, option a)
+                    relax.update();
                 }
             }
 
