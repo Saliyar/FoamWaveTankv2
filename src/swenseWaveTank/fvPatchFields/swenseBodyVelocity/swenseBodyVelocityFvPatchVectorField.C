@@ -4,6 +4,7 @@
 #include "swenseBodyVelocityFvPatchVectorField.H"
 #include "addToRunTimeSelectionTable.H"
 #include "volFields.H"
+#include "surfaceFields.H"
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -77,7 +78,21 @@ void Foam::swenseBodyVelocityFvPatchVectorField::updateCoeffs()
     const volVectorField& UInc =
         db().lookupObject<volVectorField>("UInc");
 
-    operator==(-UInc.boundaryField()[patch().index()]);
+    // Registered mesh flux (swept volumes per step, zero on a static mesh).
+    // The body wall moves with the mesh, so its face velocity is the normal
+    // part given by meshPhi (movingWallVelocity convention, slip on the body).
+    // The total U on the body is this wall velocity, so Uc = Uwall - UInc.
+    const surfaceScalarField& meshPhi =
+        db().lookupObject<surfaceScalarField>("meshPhi");
+
+    const label patchi = patch().index();
+    const vectorField Uwall
+    (
+        patch().nf()
+       *(meshPhi.boundaryField()[patchi]/patch().magSf())
+    );
+
+    operator==(Uwall - UInc.boundaryField()[patchi]);
 
     fixedValueFvPatchVectorField::updateCoeffs();
 }

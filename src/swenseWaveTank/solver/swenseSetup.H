@@ -128,6 +128,10 @@ surfaceScalarField phiIRel
     phiInc - meshPhi
 );
 
+// Point positions at t = 0: a cell or a column that has not moved since then
+// keeps its level correction and its relaxation weight (spec items 7 and 8)
+const pointField points0(mesh.points());
+
 // Moving-mesh switch: the outer correctors update the mesh (as waveFoam)
 const bool moveMeshOuterCorrectors
 (

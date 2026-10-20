@@ -341,12 +341,40 @@ forAll(Delta, col)
     }
 }
 
+// Moving mesh (spec item 7): a column with a cell that has moved since t = 0
+// (max point displacement above 1e-12 m) is skipped, as the skip box does.
+// On a static mesh no column is flagged, so the correction is unchanged.
+labelList colMoved(nCol, 0);
+if (mesh.moving())
+{
+    const pointField& ptsNow = mesh.points();
+
+    forAll(colOfCell, c)
+    {
+        const label col = colOfCell[c];
+        if (col < 0) continue;
+
+        const labelList cp = mesh.cellPoints(c);
+        forAll(cp, i)
+        {
+            if (mag(ptsNow[cp[i]] - points0[cp[i]]) > 1e-12)
+            {
+                colMoved[col] = 1;
+                break;
+            }
+        }
+    }
+
+    Info<< "SWENSE level correction: skipped moved columns = "
+        << sum(colMoved) << " of " << nCol << endl;
+}
+
 // Shifted alphaI and the increment
 scalarField inc(mesh.nCells(), 0.0);
 forAll(colOfCell, c)
 {
     const label col = colOfCell[c];
-    if (col < 0) continue;
+    if (col < 0 || colMoved[col] == 1) continue;
 
     const scalar D = Delta[col];
     const scalar s = mag(D)/dzCell[c];

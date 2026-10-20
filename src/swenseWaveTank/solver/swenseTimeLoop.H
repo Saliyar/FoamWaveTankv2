@@ -33,6 +33,8 @@ while (runTime.run())
                     // Swept mesh flux and the Grid2Grid/Air2Air points
                     meshPhi = mesh.phi();
                     incident.movePoints();
+
+                    #include "swenseZoneCheck.H"
                 }
             }
 
