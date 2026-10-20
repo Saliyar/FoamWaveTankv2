@@ -12,6 +12,7 @@ Description
 \*---------------------------------------------------------------------------*/
 
 #include "fvCFD.H"
+#include "dynamicFvMesh.H"
 #include "isoAdvection.H"
 #include "EulerDdtScheme.H"
 #include "localEulerDdtScheme.H"
@@ -32,7 +33,7 @@ int main(int argc, char *argv[])
 {
     #include "setRootCase.H"
     #include "createTime.H"
-    #include "createMesh.H"
+    #include "createDynamicFvMesh.H"
 
     pimpleControl pimple(mesh);
 

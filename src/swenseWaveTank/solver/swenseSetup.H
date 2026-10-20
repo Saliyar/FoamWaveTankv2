@@ -108,6 +108,32 @@ surfaceScalarField phiInc
     incident.UfInc() & mesh.Sf()
 );
 
+// Mesh flux (swept volumes per time step) of the moving mesh. Zero on a
+// static mesh, so every relative flux below is the absolute flux there.
+// The total flux phi and the incident flux phiIRel are relative to the mesh
+// (as in the plain ALE solvers), while phiInc and phiComp stay absolute.
+surfaceScalarField meshPhi
+(
+    IOobject("meshPhi", runTime.timeName(), mesh,
+        IOobject::NO_READ, IOobject::NO_WRITE),
+    mesh,
+    dimensionedScalar("meshPhi", dimVolume/dimTime, 0.0)
+);
+
+// Relative incident flux phiInc - meshPhi, the flux that advects alphaI
+surfaceScalarField phiIRel
+(
+    IOobject("phiIRel", runTime.timeName(), mesh,
+        IOobject::NO_READ, IOobject::NO_WRITE),
+    phiInc - meshPhi
+);
+
+// Moving-mesh switch: the outer correctors update the mesh (as waveFoam)
+const bool moveMeshOuterCorrectors
+(
+    pimple.dict().lookupOrDefault<Switch>("moveMeshOuterCorrectors", false)
+);
+
 // Advected incident volume fraction alphaI (document Section 14.2). Its
 // start value is the blend weight, and alpha starts equal to it (Theorem 1).
 // Copy of alpha1 so that alphaI has the same boundary types (swenseWaveAlpha
@@ -261,10 +287,10 @@ surfaceScalarField rhoPhiI
 (
     IOobject("rhoPhiI", runTime.timeName(), mesh,
         IOobject::NO_READ, IOobject::NO_WRITE),
-    fvc::interpolate(rhoI)*phiInc
+    fvc::interpolate(rhoI)*phiIRel
 );
 
-phi = phiComp + phiInc;
+phi = phiComp + phiInc - meshPhi;
 rhoPhi = fvc::interpolate(rho)*phi;
 
 // Interface-pressure and momentum helper fields

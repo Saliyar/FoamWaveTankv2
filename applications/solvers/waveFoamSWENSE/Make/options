@@ -34,5 +34,5 @@ EXE_LIBS = \
     -lVoFphaseTurbulentTransportModels \
     -L$(WAVES_LIBBIN) \
     -lwaves2Foam \
-    -lswenseWaveTank \
+    -lswenseWaveTank_dyn \
     -Wl,--unresolved-symbols=ignore-in-shared-libs   # FFTW comes from libGrid2Grid.so (RPATH /usr/lib64)

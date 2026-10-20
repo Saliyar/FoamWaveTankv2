@@ -82,7 +82,8 @@
         Ucf += n*(phiComp/mesh.magSf() - (n & Ucf));
     }
 
-    phi == phiComp + phiInc;
+    // Total flux relative to the mesh (absolute phiComp + phiInc minus meshPhi)
+    phi == phiComp + phiInc - meshPhi;
     #include "continuityErrs.H"
 
     U == Uc + incident.UInc();

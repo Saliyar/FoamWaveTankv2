@@ -3,4 +3,4 @@
 isoAdvection advector(alpha1, phi, U);
 
 // isoAdvector for alphaI with the incident flux (same settings as alpha1)
-isoAdvection advectorI(alphaI, phiInc, incident.UInc());
+isoAdvection advectorI(alphaI, phiIRel, incident.UInc());

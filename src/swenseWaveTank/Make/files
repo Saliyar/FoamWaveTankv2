@@ -13,4 +13,4 @@ fvPatchFields/swenseWaveVelocity/swenseWaveVelocityFvPatchVectorField.C
 fvPatchFields/swenseWaveAlpha/swenseWaveAlphaFvPatchScalarField.C
 fvPatchFields/swenseBodyVelocity/swenseBodyVelocityFvPatchVectorField.C
 
-LIB = $(FOAM_USER_LIBBIN)/libswenseWaveTank
+LIB = $(FOAM_USER_LIBBIN)/libswenseWaveTank_dyn

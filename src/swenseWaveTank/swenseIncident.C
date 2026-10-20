@@ -518,6 +518,32 @@ Foam::volScalarField Foam::swenseIncident::blendAlpha(const scalar t) const
 }
 
 
+void Foam::swenseIncident::movePoints()
+{
+    // The point lists follow the current cell and face centres. The
+    // Grid2Grid basis is stored for these points, so it is set up again only
+    // when a point has moved (a zero motion keeps the stored basis, as static)
+    const pointField oldPts(pts_);
+
+    buildPointTables();
+
+    if (pts_ == oldPts)
+    {
+        return;
+    }
+
+    rowPt_.clear();
+
+    if (g2g_)
+    {
+        g2g_->setupPoints(pts_);
+        etaPt_.setSize(pts_.size(), 0.0);
+        pExPt_.setSize(pts_.size(), 0.0);
+        UPt_.setSize(pts_.size(), vector::zero);
+    }
+}
+
+
 void Foam::swenseIncident::update
 (
     const scalar t,

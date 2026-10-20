@@ -225,6 +225,12 @@ public:
         //  = linear interpolation of alphaI)
         void update(const scalar t, const volScalarField& alphaI);
 
+        //- Rebuild the evaluation points from the current cell and face
+        //  centres after a mesh motion (call when mesh.moving()). Only the
+        //  point lists and their Grid2Grid basis change; the Grid2Grid and
+        //  Air2Air objects are not modified.
+        void movePoints();
+
         //- Accessors
         const volVectorField& UInc() const { return UInc_; }
         const volScalarField& pInc() const { return pInc_; }

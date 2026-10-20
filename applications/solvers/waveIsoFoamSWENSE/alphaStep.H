@@ -17,7 +17,7 @@ U == incident.UInc() + Uc;
 }
 
 {
-    volScalarField SpI("SpI", fvc::div(phiInc));
+    volScalarField SpI("SpI", fvc::div(phiIRel));
     zeroField Su;
 
     alphaI = alphaI.oldTime();
