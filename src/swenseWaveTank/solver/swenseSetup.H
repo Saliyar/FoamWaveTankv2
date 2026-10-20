@@ -121,12 +121,17 @@ volScalarField alphaI
     mesh
 );
 
-alphaI.primitiveFieldRef() =
-    incident.blendAlpha(runTime.value()).primitiveField();
-alphaI.correctBoundaryConditions();
+// On a restart (start time > 0) alphaI and alpha1 keep the values
+// read from the time directory; the blend initialisation is only for a start from t = 0.
+if (runTime.value() < SMALL)
+{
+    alphaI.primitiveFieldRef() =
+        incident.blendAlpha(runTime.value()).primitiveField();
+    alphaI.correctBoundaryConditions();
 
-alpha1.primitiveFieldRef() = alphaI.primitiveField();
-alpha1.correctBoundaryConditions();
+    alpha1.primitiveFieldRef() = alphaI.primitiveField();
+    alpha1.correctBoundaryConditions();
+}
 alpha2 = 1.0 - alpha1;
 mixture.correct();
 
@@ -241,10 +246,12 @@ if (pc.needReference())
 }
 
 // Complementary flux and incident flux
+// phiComp is read from the time directory when present (written by
+// AUTO_WRITE); otherwise it starts as fvc::flux(Uc), as before.
 surfaceScalarField phiComp
 (
     IOobject("phiComp", runTime.timeName(), mesh,
-        IOobject::NO_READ, IOobject::NO_WRITE),
+        IOobject::READ_IF_PRESENT, IOobject::AUTO_WRITE),
     fvc::flux(Uc)
 );
 
@@ -263,6 +270,13 @@ rhoPhi = fvc::interpolate(rho)*phi;
 // Interface-pressure and momentum helper fields
 surfaceVectorField Ucf(IOobject("Ucf", runTime.timeName(), mesh,
     IOobject::NO_READ, IOobject::NO_WRITE), fvc::interpolate(Uc));
+
+// Ucf rebuilt from phiComp as in swensePcEqn.H (interpolate Uc, normal part from phiComp)
+{
+    Ucf = fvc::interpolate(Uc);
+    surfaceVectorField n(mesh.Sf()/mesh.magSf());
+    Ucf += n*(phiComp/mesh.magSf() - (n & Ucf));
+}
 
 bool includeDivUInc
 (
