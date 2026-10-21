@@ -79,18 +79,41 @@ void Foam::swenseBodyVelocityFvPatchVectorField::updateCoeffs()
         db().lookupObject<volVectorField>("UInc");
 
     // Registered mesh flux (swept volumes per step, zero on a static mesh).
-    // The body wall moves with the mesh, so its face velocity is the normal
-    // part given by meshPhi (movingWallVelocity convention, slip on the body).
-    // The total U on the body is this wall velocity, so Uc = Uwall - UInc.
     const surfaceScalarField& meshPhi =
         db().lookupObject<surfaceScalarField>("meshPhi");
 
     const label patchi = patch().index();
-    const vectorField Uwall
-    (
-        patch().nf()
-       *(meshPhi.boundaryField()[patchi]/patch().magSf())
-    );
+
+    // Full wall velocity as movingWallVelocity: the tangential part from the
+    // face centre motion, (Cf - Cf_old)/dt, and the normal part replaced by
+    // meshPhi/magSf. The total U on the body is this wall velocity, so
+    // Uc = Uwall - UInc.
+    vectorField Uwall(patch().size(), Zero);
+
+    if (patch().boundaryMesh().mesh().moving())
+    {
+        const fvMesh& mesh = patch().boundaryMesh().mesh();
+        const polyPatch& pp = patch().patch();
+        const pointField& oldPoints = mesh.oldPoints();
+
+        vectorField oldFc(pp.size());
+        forAll(oldFc, i)
+        {
+            oldFc[i] = pp[i].centre(oldPoints);
+        }
+
+        const scalar deltaT = mesh.time().deltaTValue();
+        const vectorField Up((pp.faceCentres() - oldFc)/deltaT);
+
+        const vectorField n(patch().nf());
+        const scalarField& magSf = patch().magSf();
+        const scalarField Un
+        (
+            meshPhi.boundaryField()[patchi]/(magSf + VSMALL)
+        );
+
+        Uwall = Up + n*(Un - (n & Up));
+    }
 
     operator==(Uwall - UInc.boundaryField()[patchi]);
 

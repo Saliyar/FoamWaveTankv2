@@ -233,6 +233,10 @@ public:
 
         //- Accessors
         const volVectorField& UInc() const { return UInc_; }
+        //  Non-const access for the isoAdvector of alphaI, which holds a
+        //  reference to UInc: only to make UInc relative to the mesh around
+        //  its advection step, and restore it after
+        volVectorField& UIncRW() { return UInc_; }
         const volScalarField& pInc() const { return pInc_; }
         const surfaceVectorField& UfInc() const { return UfInc_; }
         const surfaceScalarField& pfInc() const { return pfInc_; }

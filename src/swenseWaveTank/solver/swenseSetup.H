@@ -313,3 +313,20 @@ bool includeDivUInc
     pimple.dict().lookupOrDefault<Switch>("includeDivUInc", false)
 );
 
+// rAUf of the last UcEqn (1 on the first step), for the flux correction after
+// a mesh motion (swenseCorrectPhi.H)
+surfaceScalarField rAUfPrev
+(
+    IOobject("rAUfPrev", runTime.timeName(), mesh,
+        IOobject::NO_READ, IOobject::NO_WRITE),
+    mesh,
+    dimensionedScalar("rAUf", dimTime/dimDensity, 1)
+);
+
+// Flux correction after a mesh motion, switched as in waveFoam (default on a
+// dynamic mesh)
+bool correctPhi
+(
+    pimple.dict().getOrDefault("correctPhi", mesh.dynamic())
+);
+

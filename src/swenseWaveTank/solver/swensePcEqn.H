@@ -2,6 +2,8 @@
 {
     volScalarField rAU("rAU", 1.0/UcEqn.A());
     surfaceScalarField rAUf("rAUf", fvc::interpolate(rAU));
+    // Kept for the flux correction after a mesh motion (swenseCorrectPhi.H)
+    rAUfPrev = rAUf;
     volVectorField HbyA(constrainHbyA(rAU*UcEqn.H(), Uc, pc));
 
     surfaceScalarField phiHbyA

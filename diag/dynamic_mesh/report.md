@@ -2,6 +2,8 @@
 
 Status: Stages 0 to 4 (M1) done. Stage 5 and Stage 6 NOT run. M2 NOT run. sixDoF implemented as a configuration and smoke-tested only (20 steps).
 
+Latest commit (six fixes: absolute-divergence alpha source, correctPhi for phiComp, relative velocity for isoAdvector, full body wall velocity, column skip at 1e-3 dz, V0/V scaling removed): Stage 3 static, M1 (2 periods) and M2 (2 periods) are NOT run against this code. The library and both solvers build; no results are claimed for the new code.
+
 ## Summary
 
 1. Branch SWENSE_dynamic at a078d9b, worktree wt_SWENSE_dynamic. Local commits only; no push, no merge. Production binaries and libswenseWaveTank.so untouched (build names _dyn and libswenseWaveTank_dyn).

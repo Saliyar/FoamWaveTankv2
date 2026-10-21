@@ -341,9 +341,9 @@ forAll(Delta, col)
     }
 }
 
-// Moving mesh (spec item 7): a column with a cell that has moved since t = 0
-// (max point displacement above 1e-12 m) is skipped, as the skip box does.
-// On a static mesh no column is flagged, so the correction is unchanged.
+// Moving mesh (spec item 7): a column is skipped, as the skip box does, when
+// a cell of it has moved since t = 0 by more than 1e-3 of its own dz. On a
+// static mesh no column is flagged, so the correction is unchanged.
 labelList colMoved(nCol, 0);
 if (mesh.moving())
 {
@@ -357,7 +357,7 @@ if (mesh.moving())
         const labelList cp = mesh.cellPoints(c);
         forAll(cp, i)
         {
-            if (mag(ptsNow[cp[i]] - points0[cp[i]]) > 1e-12)
+            if (mag(ptsNow[cp[i]] - points0[cp[i]]) > 1e-3*dzCell[c])
             {
                 colMoved[col] = 1;
                 break;

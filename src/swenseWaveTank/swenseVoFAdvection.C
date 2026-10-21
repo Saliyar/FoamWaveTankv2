@@ -26,6 +26,7 @@ void Foam::swenseAdvanceVoF
 (
     volScalarField& alpha,
     const surfaceScalarField& phi,
+    const volScalarField& divPhi,
     const volVectorField& U,
     surfaceScalarField& rhoPhi,
     const dimensionedScalar& rho1,
@@ -59,24 +60,19 @@ void Foam::swenseAdvanceVoF
     const word alpharScheme("div(phirb,alpha)");
 
     // Advective form (document Rev2, 16.7): d(alpha)/dt + div(alpha phi)
-    // = alpha div(phi), with the discrete divergence of the same face flux.
-    // Source form for MULES: Sp = div(phi) (implicit in the predictor and in
+    // = alpha div(phi_abs). The flux phi is relative to the mesh, so the
+    // source divPhi is the divergence of the ABSOLUTE flux, passed in by the
+    // solver (phi + meshPhi; equal to div(phi) on a static mesh).
+    // Source form for MULES: Sp = divPhi (implicit in the predictor and in
     // the explicit update). In the limited correction the source is already
     // in psi, so Su = -Sp psi, as OpenFOAM alphaEqn.H does; otherwise the
     // source would be applied twice.
-    const volScalarField divPhi("divPhi", fvc::div(phi));
     zeroField Su;
 
-    // Restart every call from the old-time value (document Section 16.3.2)
+    // Restart every call from the old-time value (document Section 16.3.2).
+    // On a moving mesh MULES and the Euler ddt scheme take the cell volume
+    // change into account, so no V0/V scaling is applied here.
     alpha = alpha.oldTime();
-
-    // Moving mesh: the old-time value is per unit volume of the old cell, so
-    // it is scaled to the current cell volume (V0/V, as the VoF alpha
-    // equation of OpenFOAM does). The same for alpha1 and alphaI.
-    if (mesh.moving())
-    {
-        alpha.primitiveFieldRef() *= mesh.Vsc0()/mesh.Vsc();
-    }
 
     // Compression coefficient, with the optional terms of alphaEqn.H
     surfaceScalarField phic(cAlpha*mag(phi/mesh.magSf()));

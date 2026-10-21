@@ -40,6 +40,13 @@ while (runTime.run())
             }
 
             #include "swenseIncidentStep.H"
+
+            // Moving mesh: complementary flux from the face velocity, made
+            // divergence-free with the incident flux (waveFoam correctPhi)
+            if (mesh.changing() && correctPhi)
+            {
+                #include "swenseCorrectPhi.H"
+            }
         }
 
         // Alpha1 with phi and alphaI with phiIRel, same function (16.3.2)
