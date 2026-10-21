@@ -7,6 +7,21 @@
 // div(phiComp), plus div(phiInc) when includeDivUInc, as in swensePcEqn.H.
 phiComp = Ucf & mesh.Sf();
 
+// As OpenFOAM correctUphiBCs: where Uc fixes its value (the body wall, the
+// inlet and outlet), the boundary flux is taken from the boundary velocity.
+// On the body this gives phiComp = meshPhi - phiInc, so the total flux
+// relative to the mesh is zero there.
+Uc.correctBoundaryConditions();
+
+forAll(Uc.boundaryField(), patchi)
+{
+    if (Uc.boundaryField()[patchi].fixesValue())
+    {
+        phiComp.boundaryFieldRef()[patchi] =
+            Uc.boundaryField()[patchi] & mesh.Sf().boundaryField()[patchi];
+    }
+}
+
 {
     wordList pcCorrTypes
     (
