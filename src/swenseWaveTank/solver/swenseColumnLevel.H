@@ -13,6 +13,9 @@
 // alphaI = 1 there, which is checked every step.
 // Optional skip box (levelCorrectionSkipMin/Max in controlDict): columns that
 // overlap it, or that lack cells (box cut, refinement), are not corrected.
+// Parallel: every column must lie on one processor (checked at set-up). The
+// column sums are then local; the global numbers (max|Delta|, clipped volume,
+// counts) are reduced, and logs are written by the master.
 // The relaxation densities are computed after this, in swenseAlphaRelax.H.
 
 static bool colInit = true;
@@ -27,18 +30,19 @@ static label nCol = 0;
 static scalar zLevelMin = -GREAT;
 static labelList cellsBelow;
 static scalar clipTotal = 0.0;
+static stringList colKeyList;
+static bool colLogOn = false;
+static bool colLogDone = false;
 
 if (colInit)
 {
     colInit = false;
 
-    if (Pstream::parRun())
-    {
-        FatalErrorInFunction
-            << "column level correction needs every column on one processor; "
-            << "parallel runs are not supported"
-            << exit(FatalError);
-    }
+    colLogOn = runTime.controlDict().lookupOrDefault<bool>
+    (
+        "levelCorrectionColumnLog",
+        false
+    );
 
     zLevelMin = runTime.controlDict().lookupOrDefault<scalar>
     (
@@ -68,9 +72,12 @@ if (colInit)
         zTopCell[c] = zmax;
     }
 
-    // Columns: active cells (bottom at or above zLevelMin) with the same (x, y)
+    // Columns: active cells (bottom at or above zLevelMin) with the same (x, y).
+    // Keys and cell counts are those of this processor.
     HashTable<label, string> colMap;
     DynamicList<point> colXY;
+    DynamicList<string> colKeyL;
+    DynamicList<label> colCountL;
     colOfCell.setSize(mesh.nCells(), -1);
     DynamicList<label> below;
     forAll(Cc, c)
@@ -89,11 +96,62 @@ if (colInit)
         {
             colMap.insert(key, colMap.size());
             colXY.append(Cc[c]);
+            colKeyL.append(key);
+            colCountL.append(0);
         }
         colOfCell[c] = colMap[key];
+        colCountL[colOfCell[c]]++;
     }
     nCol = colMap.size();
     cellsBelow = below;
+
+    // Every column must lie on one processor. Each rank sends its keys and
+    // cell counts to all ranks, and every rank makes the same check, so all
+    // ranks stop together. In serial the list holds only this rank: no split.
+    {
+        List<stringList> keysAll(Pstream::nProcs());
+        List<labelList> cellsAll(Pstream::nProcs());
+        keysAll[Pstream::myProcNo()] = stringList(colKeyL);
+        cellsAll[Pstream::myProcNo()] = labelList(colCountL);
+        Pstream::allGatherList(keysAll);
+        Pstream::allGatherList(cellsAll);
+
+        HashTable<label, string> procOf;
+        DynamicList<string> splitKeys;
+        forAll(keysAll, proc)
+        {
+            forAll(keysAll[proc], i)
+            {
+                const string& key = keysAll[proc][i];
+                if (!procOf.found(key))
+                {
+                    procOf.insert(key, proc);
+                }
+                else if (procOf[key] != proc && !splitKeys.found(key))
+                {
+                    splitKeys.append(key);
+                }
+            }
+        }
+
+        if (splitKeys.size())
+        {
+            const label nShow = min(label(5), label(splitKeys.size()));
+            string shown;
+            for (label i = 0; i < nShow; i++)
+            {
+                shown += splitKeys[i] + " ";
+            }
+
+            FatalErrorInFunction
+                << "columns split across processors, use method manual with "
+                << "whole columns per rank, or simple (N 1 1) with N dividing "
+                << "the number of columns (here " << procOf.size() << ")" << nl
+                << "split columns: " << splitKeys.size()
+                << ", first " << nShow << " keys (x_y, micrometres): "
+                << shown << exit(FatalError);
+        }
+    }
 
     // Skip box (optional: controlDict levelCorrectionSkipMin and
     // levelCorrectionSkipMax). A column is skipped when one of its cells
@@ -149,14 +207,17 @@ if (colInit)
             }
         }
 
+        // Full column height: the largest count over all processors
         label nFull = 0;
         forAll(nCellsRaw, col)
         {
             nFull = max(nFull, nCellsRaw[col]);
         }
+        reduce(nFull, maxOp<label>());
 
         labelList newCol(nCol, -1);
         DynamicList<point> colXYkeep;
+        DynamicList<string> colKeyKeep;
         label nKeep = 0;
         label nBoxSkip = 0;
         label nIncSkip = 0;
@@ -174,6 +235,7 @@ if (colInit)
             }
             newCol[col] = nKeep++;
             colXYkeep.append(colXY[col]);
+            colKeyKeep.append(colKeyL[col]);
         }
         forAll(colOfCell, c)
         {
@@ -183,13 +245,20 @@ if (colInit)
             }
         }
         colXY = colXYkeep;
+        colKeyL = colKeyKeep;
         nCol = nKeep;
+
+        reduce(nBoxSkip, sumOp<label>());
+        reduce(nIncSkip, sumOp<label>());
 
         Info<< "level correction: skip box min " << bMin << " max " << bMax
             << ", skipped columns " << nBoxSkip << " (overlap the box) and "
             << nIncSkip << " (incomplete, " << nFull << " cells expected), "
-            << "corrected columns " << nCol << endl;
+            << "corrected columns " << returnReduce(nCol, sumOp<label>())
+            << endl;
     }
+
+    colKeyList = stringList(colKeyL);
 
     colX.setSize(nCol);
     colY.setSize(nCol);
@@ -213,15 +282,23 @@ if (colInit)
         nCellsCol[col]++;
     }
 
+    // Reference count: the largest over all columns of all processors
+    label nCellsRef = 0;
+    forAll(nCellsCol, col)
+    {
+        nCellsRef = max(nCellsRef, nCellsCol[col]);
+    }
+    reduce(nCellsRef, maxOp<label>());
+
     const scalar zTopMesh = mesh.bounds().max().z();
     forAll(nCellsCol, col)
     {
-        if (nCellsCol[col] != nCellsCol[0])
+        if (nCellsCol[col] != nCellsRef)
         {
             FatalErrorInFunction
                 << "column " << col << " at x = " << colX[col]
                 << " has " << nCellsCol[col] << " cells above zLevelMin, "
-                << "column 0 at x = " << colX[0] << " has " << nCellsCol[0]
+                << "the largest column has " << nCellsRef
                 << exit(FatalError);
         }
         if (mag(zTopCol[col] - zTopMesh) > 1e-9)
@@ -289,13 +366,15 @@ if (colInit)
     }
 
     Info<< "level correction: levelCorrectionZMin = " << zLevelMin
-        << ", columns = " << nCol << ", cells per column = "
-        << (nCol ? nCellsCol[0] : 0) << ", cells below = " << cellsBelow.size()
+        << ", columns = " << returnReduce(nCol, sumOp<label>())
+        << ", cells per column = " << nCellsRef
+        << ", cells below = " << returnReduce(cellsBelow.size(), sumOp<label>())
         << endl;
 }
 
-// Cells below zLevelMin must stay fully water (the column formula assumes it)
-if (cellsBelow.size())
+// Cells below zLevelMin must stay fully water (the column formula assumes it).
+// The test is global, so a processor without such cells still takes part.
+if (returnReduce(cellsBelow.size(), sumOp<label>()))
 {
     const scalarField& aB = alphaI.primitiveField();
     scalar maxBelow = -GREAT;
@@ -303,6 +382,7 @@ if (cellsBelow.size())
     {
         maxBelow = max(maxBelow, 1.0 - aB[cellsBelow[i]]);
     }
+    reduce(maxBelow, maxOp<scalar>());
     Info<< "level correction: max(1 - alphaI) below zLevelMin = " << maxBelow
         << endl;
     if (maxBelow > 1e-6)
@@ -341,6 +421,43 @@ forAll(Delta, col)
     }
 }
 
+// Global maximum, and the x of a column that reaches it (largest x on a tie
+// between processors; serial keeps the first column)
+{
+    const scalar dMaxLocal = dMax;
+    reduce(dMax, maxOp<scalar>());
+    xDMax = (dMaxLocal == dMax) ? xDMax : -GREAT;
+    reduce(xDMax, maxOp<scalar>());
+}
+
+// Per-column Delta for comparing decompositions (controlDict
+// levelCorrectionColumnLog, off by default). First correction call only.
+if (colLogOn && !colLogDone)
+{
+    colLogDone = true;
+
+    List<stringList> keysAll(Pstream::nProcs());
+    List<scalarList> deltaAll(Pstream::nProcs());
+    keysAll[Pstream::myProcNo()] = colKeyList;
+    deltaAll[Pstream::myProcNo()] = scalarList(Delta);
+    Pstream::allGatherList(keysAll);
+    Pstream::allGatherList(deltaAll);
+
+    if (Pstream::master())
+    {
+        OFstream os(fileName("columnDelta.dat"));
+        os.precision(17);
+        os << "# column key Delta at t = " << runTime.timeName() << nl;
+        forAll(keysAll, proc)
+        {
+            forAll(keysAll[proc], i)
+            {
+                os << keysAll[proc][i] << " " << deltaAll[proc][i] << nl;
+            }
+        }
+    }
+}
+
 // Shifted alphaI and the increment
 scalarField inc(mesh.nCells(), 0.0);
 forAll(colOfCell, c)
@@ -368,7 +485,8 @@ alphaI.primitiveFieldRef() += inc;
 // reported (alphaI is not clipped)
 const scalarField a1Pre(alpha1.primitiveField() + inc);
 const scalarField a1Clip(min(max(a1Pre, scalar(0)), scalar(1)));
-const scalar clipVol = sum(mag(a1Pre - a1Clip)*mesh.V());
+const scalarField clipCell(mag(a1Pre - a1Clip)*mesh.V());
+const scalar clipVol = gSum(clipCell);
 clipTotal += clipVol;
 alpha1.primitiveFieldRef() = a1Clip;
 
@@ -394,6 +512,7 @@ forAll(dPost, col)
         mag(zBotCol[col] + dPost[col] - incident.etaRow(rowOfCol[col], tNow))
     );
 }
+reduce(dPostMax, maxOp<scalar>());
 
 Info<< "level correction: max|Delta| before = " << dMax << " m at x = " << xDMax
     << ", after = " << dPostMax << " m" << endl;

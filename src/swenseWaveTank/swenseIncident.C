@@ -35,15 +35,30 @@ Foam::scalar Foam::swenseIncident::interfaceCellHeight(const fvMesh& mesh)
         }
     }
 
-    Foam::sort(zs);
+    // Heights from every processor: a processor holding part of the mesh
+    // would see a smaller gap, and the guard distance must be the same on all
+    List<scalarList> zsProc(Pstream::nProcs());
+    zsProc[Pstream::myProcNo()] = scalarList(zs);
+    Pstream::allGatherList(zsProc);
+
+    DynamicList<scalar> zsAll;
+    forAll(zsProc, proc)
+    {
+        forAll(zsProc[proc], i)
+        {
+            zsAll.append(zsProc[proc][i]);
+        }
+    }
+
+    Foam::sort(zsAll);
 
     scalar dz = 0.0;
 
-    for (label i = 1; i < zs.size(); ++i)
+    for (label i = 1; i < zsAll.size(); ++i)
     {
-        if (zs[i] - zs[i-1] > SMALL)
+        if (zsAll[i] - zsAll[i-1] > SMALL)
         {
-            dz = max(dz, zs[i] - zs[i-1]);
+            dz = max(dz, zsAll[i] - zsAll[i-1]);
         }
     }
 
