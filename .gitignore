@@ -11,4 +11,4 @@ Make/.*
 *.o
 *.so
 **/constant/modes_HOS_SWENSE.dat
-application/solvers/waveIsoGoam/
+applications/solvers/waveIsoGoam/
