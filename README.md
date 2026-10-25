@@ -30,33 +30,36 @@ The framework leverages the **Grid2Grid** methodology for consistent interpolati
 ---
 
 ## Installation
-> **Note:** Before installing FoamWaveTankv2, make sure you have the following dependencies installed:
-> 
-> - **HOS-NWT (Higher-Order Spectral Nonlinear Wave Toolkit)**  
->   GitHub / documentation: [HOS-NWT Repository](https://gitlab.com/lheea/HOS-NWT)
-> 
-> - **Grid2Grid (Grid-to-Grid interpolation toolbox)**  
->   GitHub / documentation: [Grid2Grid Repository](https://gitlab.com/lheea/Grid2Grid)
+
+You need OpenFOAM (.com), a C/C++ and Fortran compiler, CMake and GSL. Grid2Grid comes with the repository as a git submodule, and FFTW (which Grid2Grid needs) is found or built automatically, so there are no paths to edit.
 
 ```bash
-## Step 0: Load required modules (If you are in Server/install these libraries)
-module load OpenFoam/v2206/gcc-11.4.0-binutils-2.40-openmpi-4.1.6
-module load fftw/3.310
+## Step 0: Prerequisites
+# Ubuntu/Debian:  sudo apt install build-essential gfortran cmake libgsl-dev
+# RHEL/Rocky:     sudo dnf install gcc gcc-c++ gcc-gfortran cmake gsl-devel
+# Cluster:        module load the OpenFOAM, gcc, cmake and gsl modules
+#                 (an FFTW module is optional, see below)
 
-## Step 1: Clone the repository
-git clone https://github.com/Saliyar/FoamWaveTankv2.git
+## Step 1: Load OpenFOAM, e.g.
+source /usr/lib/openfoam/openfoam2412/etc/bashrc
+
+## Step 2: Clone with submodules
+git clone --recurse-submodules https://github.com/Saliyar/FoamWaveTankv2.git
 cd FoamWaveTankv2
 
-## Step 2: Edit bin/bashrc to set WAVES_DIR
-# This will open nano; update WAVES_DIR to your FoamWaveTankv2 path, save and exit
-nano bin/bashrc
-
-## Step 3: Update Grid2Grid FFTW path (Update with your path)
-sed -i 's|set(FFTW3_LIB_PATH  .*|set(FFTW3_LIB_PATH  /appl9/fftw/3.3.10/XeonE5-2660v3/gcc-13.3.0/lib)|' Grid2Grid/Grid2GridOptions.cmake
-
-## Step 4: Compile
+## Step 3: Compile (uses all cores; ./Allwmake -j 4 to limit)
 ./Allwmake
-   ```
+```
+
+The build stops early with a clear message if something is missing. The full output is saved in `log.build`.
+
+**How FFTW is handled.** `ThirdParty/Allwmake` checks, in order, `FFTW3_LIB_PATH` (if you set it), a previous local build in `ThirdParty/fftw`, loaded modules and the standard system folders. Every `libfftw3.a` it finds is test-linked into a shared library first, because a static FFTW built without `-fPIC` cannot be linked into `libGrid2Grid.so`. If none works, FFTW 3.3.10 is downloaded and built once into `ThirdParty/fftw` (a few minutes).
+
+**No internet on the build node?** Download https://www.fftw.org/fftw-3.3.10.tar.gz elsewhere and copy it into `ThirdParty/` before running `./Allwmake`.
+
+**Rebuilding Grid2Grid.** It is skipped when `$FOAM_USER_LIBBIN/libGrid2Grid.so` already exists. Run `ThirdParty/Allclean` to force a rebuild (`ThirdParty/Allclean -all` also removes the local FFTW).
+
+Related tools: [HOS-NWT](https://gitlab.com/lheea/HOS-NWT) generates the wave fields, and [Grid2Grid](https://gitlab.com/lheea/Grid2Grid) maps them onto the OpenFOAM mesh.
 
 ---
 

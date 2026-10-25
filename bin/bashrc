@@ -24,24 +24,16 @@ if [ -z "$WAVES_GSL_INCLUDE" ]; then
     export WAVES_GSL_INCLUDE=/usr/include
 fi
 if [ -z "$WAVES_GSL_LIB" ]; then
-    export WAVES_GSL_LIB=/usr/lib64
+    if [ -d /usr/lib64 ]; then
+        export WAVES_GSL_LIB=/usr/lib64
+    else
+        export WAVES_GSL_LIB=/usr/lib/$(uname -m)-linux-gnu
+    fi
 fi
 
-# Auto-detect FFTW from loaded modules
-if [ -n "$FFTWDIR" ]; then
-    export FFTW3_LIB_PATH="$FFTWDIR/lib"
-    export FFTW3_INCLUDE_PATH="$FFTWDIR/include"
-elif [ -d "$(echo $CMAKE_PREFIX_PATH | cut -d: -f1)" ]; then
-    # Use CMAKE_PREFIX_PATH from module (e.g., fftw3/3.3.10)
-    # CMAKE_PREFIX_PATH is like: /appl9/fftw/3.3.10/.../lib/cmake
-    # We need: /appl9/fftw/3.3.10/.../lib
-    FFTW_PREFIX=$(echo $CMAKE_PREFIX_PATH | cut -d: -f1)
-    export FFTW3_LIB_PATH="${FFTW_PREFIX%/cmake}"
-    export FFTW3_INCLUDE_PATH="$(dirname ${FFTW3_LIB_PATH})/include"
-else
-    export FFTW3_LIB_PATH=/usr/lib64
-    export FFTW3_INCLUDE_PATH=/usr/include
-fi
+# FFTW (for Grid2Grid) is located by ThirdParty/Allwmake: it checks
+# FFTW3_LIB_PATH if you set it, then loaded modules and system paths, and
+# otherwise builds FFTW itself. Nothing to set here.
 
 ### OTHER STATIC ENVIRONMENTAL VARIABLES
 ## Version number - first old numbering system for foam-extend, OpenFoam and up to OpenFoam-v3.0+

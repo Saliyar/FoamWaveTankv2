@@ -1,128 +1,317 @@
 #!/bin/bash
+##############################################################################
+## Third-party dependencies of FoamWaveTankv2
+##
+##   1. FFTW 3 (static, position independent) - needed by Grid2Grid
+##   2. Grid2Grid  -> $FOAM_USER_LIBBIN/libGrid2Grid.so
+##   3. fenton4Foam
+##
+## FFTW is found automatically. Every candidate libfftw3.a is test-linked into
+## a shared library first, because a static FFTW built without -fPIC is the
+## usual reason the Grid2Grid build fails. If no usable FFTW is found, FFTW is
+## built once from source into ThirdParty/fftw/install (a few minutes).
+##
+## Optional environment variables:
+##   FFTW3_LIB_PATH      directory holding libfftw3.a (tried first)
+##   FFTW3_INCLUDE_PATH  directory holding fftw3.f03 (default: ../include)
+##   FFTW_TARBALL        local fftw-3.3.10.tar.gz, for machines without internet
+##   WM_NCOMPPROCS       number of parallel compile jobs
+##############################################################################
 
-## Modified script to check and install Grid2Grid from GitHub if not found
+cd "${0%/*}" || exit 1
+THIRDPARTY_DIR="$(pwd)"
 
-function Grid2GridInstall()
+# Parallel jobs: "-j N" argument, then WM_NCOMPPROCS, then all cores
+NPROCS="${WM_NCOMPPROCS:-$(nproc 2>/dev/null || echo 2)}"
+if [ "$1" = "-j" ] && [ -n "$2" ]; then
+    NPROCS="$2"
+fi
+
+FFTW_VERSION="3.3.10"
+FFTW_SHA256="56c932549852cddcfafdab3820b0200c7742675be92179e59e6215b340e26467"
+FFTW_URL="https://www.fftw.org/fftw-${FFTW_VERSION}.tar.gz"
+FFTW_PREFIX="$THIRDPARTY_DIR/fftw/install"
+
+# Set by fftwUsable / findFFTW
+FFTW_LIB=""
+FFTW_INC=""
+
+##############################################################################
+## FFTW
+##############################################################################
+
+# fftwUsable <libDir> [includeDir]
+# True if <libDir>/libfftw3.a exists, fftw3.f03 is found and the static
+# library can be linked into a shared library (i.e. it was built with -fPIC).
+function fftwUsable()
 {
-    # Exit immediately if there is an error
-    # set -e
+    local libDir="$1"
+    local incDir="$2"
 
-    # Set the directory for Grid2Grid installation
-    SRCDIR="Grid2Grid/"
-    LIBRARY="$FOAM_USER_LIBBIN/libGrid2Grid.so"
-    REPO_URL="https://github.com/LHEEA/Grid2Grid.git"
+    [ -n "$libDir" ] && [ -f "$libDir/libfftw3.a" ] || return 1
 
-    # Check if libGrid2Grid.so exists in $FOAM_USER_LIBBIN
-    if [ -f "${LIBRARY}" ]; then
-        echo "libGrid2Grid.so is already present in \$FOAM_USER_LIBBIN."
-        echo "Skipping the build process."
+    if [ -z "$incDir" ] || [ ! -f "$incDir/fftw3.f03" ]; then
+        incDir=""
+        for d in "$libDir/../include" "$(dirname "$libDir")/include" \
+                 /usr/include /usr/local/include
+        do
+            if [ -f "$d/fftw3.f03" ]; then
+                incDir="$(cd "$d" && pwd)"
+                break
+            fi
+        done
+    fi
+    [ -n "$incDir" ] || return 1
+
+    local tmp
+    tmp="$(mktemp -d)" || return 1
+    cat > "$tmp/fftwPicTest.f90" <<'EOF'
+subroutine fftwPicTest(n, x, y)
+    use, intrinsic :: iso_c_binding
+    implicit none
+    include 'fftw3.f03'
+    integer(C_INT), intent(in) :: n
+    real(C_DOUBLE), intent(inout) :: x(n)
+    complex(C_DOUBLE_COMPLEX), intent(inout) :: y(n/2+1)
+    type(C_PTR) :: plan
+    plan = fftw_plan_dft_r2c_1d(n, x, y, FFTW_ESTIMATE)
+    call fftw_execute_dft_r2c(plan, x, y)
+    call fftw_destroy_plan(plan)
+end subroutine fftwPicTest
+EOF
+    if gfortran -shared -fPIC -I"$incDir" "$tmp/fftwPicTest.f90" \
+        "$libDir/libfftw3.a" -o "$tmp/libfftwPicTest.so" > "$tmp/log" 2>&1
+    then
+        rm -rf "$tmp"
+        FFTW_LIB="$(cd "$libDir" && pwd)"
+        FFTW_INC="$incDir"
         return 0
     fi
 
-    # Check for the 'Grid2Grid' folder
-    if [ ! -d "${SRCDIR}" ] || [ -z "$(ls -A "${SRCDIR}")" ]; then
-        echo "Grid2Grid folder not found or empty. Cloning from GitHub..."
-        git clone "${REPO_URL}" "${SRCDIR}"
+    if grep -q -i "recompile with -fPIC" "$tmp/log"; then
+        echo "  - $libDir/libfftw3.a was built without -fPIC, skipping"
+    else
+        echo "  - $libDir/libfftw3.a failed the link test, skipping"
     fi
+    rm -rf "$tmp"
+    return 1
+}
 
-    echo "Grid2Grid folder is found and populated."
+function buildFFTW()
+{
+    local srcRoot="$THIRDPARTY_DIR/fftw"
+    local tarball="$srcRoot/fftw-${FFTW_VERSION}.tar.gz"
 
-    # Check if the required GCC version is available
-    GCCREQUIRE="4.9"
-    CHECKGCC=$(printf '%s\n' "${GCCREQUIRE}" "`gcc -dumpversion`" | sort -V | head -n1)
+    echo ""
+    echo "Building FFTW ${FFTW_VERSION} from source into $FFTW_PREFIX"
+    echo "(one-time step, takes a few minutes)"
+    mkdir -p "$srcRoot"
 
-    if [ ! "${CHECKGCC}" = "$GCCREQUIRE" ]; then
-        echo "Grid2Grid: Requires GCC v4.9+ ... cannot compile"
-        return 0
-    fi
-
-    # CRITICAL: Check FFTW3_LIB_PATH is valid BEFORE building
-    if [ -z "$FFTW3_LIB_PATH" ] || [ ! -f "$FFTW3_LIB_PATH/libfftw3.a" ]; then
-        echo ""
-        echo "========== ERROR =========="
-        echo "libfftw3.a not found at: $FFTW3_LIB_PATH"
-        echo "Grid2Grid build STOPPED"
-        echo ""
-        echo "Available FFTW locations:"
-        ls -la /usr/lib64/libfftw3* 2>/dev/null || echo "  /usr/lib64: not found"
-        ls -la /usr/local/lib/libfftw3* 2>/dev/null || echo "  /usr/local/lib: not found"
-        if [ -n "$FFTWDIR" ]; then
-            echo "  FFTWDIR: $FFTWDIR"
+    if [ -n "$FFTW_TARBALL" ]; then
+        tarball="$FFTW_TARBALL"
+    elif [ -f "$THIRDPARTY_DIR/fftw-${FFTW_VERSION}.tar.gz" ]; then
+        tarball="$THIRDPARTY_DIR/fftw-${FFTW_VERSION}.tar.gz"
+    elif [ ! -f "$tarball" ]; then
+        echo "Downloading $FFTW_URL"
+        if command -v curl > /dev/null; then
+            curl -fL -o "$tarball.part" "$FFTW_URL"
+        else
+            wget -O "$tarball.part" "$FFTW_URL"
         fi
-        echo ""
-        echo "To fix: module load fftw3 OR set FFTW3_LIB_PATH correctly"
-        echo "=============================="
-        echo ""
+        if [ $? -ne 0 ]; then
+            rm -f "$tarball.part"
+            echo ""
+            echo "ERROR: could not download FFTW (no internet on this node?)"
+            echo "  Download $FFTW_URL on a machine with internet,"
+            echo "  copy it to $THIRDPARTY_DIR/ and run ./Allwmake again."
+            return 1
+        fi
+        mv "$tarball.part" "$tarball"
+    fi
+
+    if [ ! -f "$tarball" ]; then
+        echo "ERROR: FFTW tarball not found: $tarball"
         return 1
     fi
 
-    echo "FFTW3 library found at: $FFTW3_LIB_PATH/libfftw3.a"
+    if command -v sha256sum > /dev/null; then
+        local sum
+        sum="$(sha256sum "$tarball" | cut -d' ' -f1)"
+        if [ "$sum" != "$FFTW_SHA256" ]; then
+            if [ -n "$FFTW_TARBALL" ]; then
+                echo "WARNING: $tarball is not the official fftw-${FFTW_VERSION}.tar.gz (checksum differs), using it anyway"
+            else
+                echo "ERROR: checksum mismatch for $tarball, deleting it. Run ./Allwmake again."
+                rm -f "$tarball"
+                return 1
+            fi
+        fi
+    fi
 
-    # Build process
-    pushd "${SRCDIR}" || return
-    echo "Building Grid2Grid..."
-    echo "$(pwd)"
+    local buildDir="$srcRoot/build"
+    rm -rf "$buildDir"
+    mkdir -p "$buildDir"
+    tar xzf "$tarball" -C "$buildDir" --strip-components=1 || return 1
 
-    # Patch Grid2GridOptions.cmake to use correct FFTW path (override hardcoded developer path)
-    echo "Patching Grid2GridOptions.cmake with correct FFTW path..."
-    sed -i "s|set(FFTW3_LIB_PATH  .*|set(FFTW3_LIB_PATH  $FFTW3_LIB_PATH)|" Grid2GridOptions.cmake
+    # SIMD kernels are chosen at run time by FFTW, so enabling them is safe
+    local simd=""
+    case "$(uname -m)" in
+        x86_64) simd="--enable-sse2 --enable-avx --enable-avx2" ;;
+    esac
 
-    cmake -S. -Bbuild -DBUILD_OF_LIB=ON -DCMAKE_FIND_LIBRARY_SUFFIXES=".so;.a" -DFFTW3_LIB_PATH="$FFTW3_LIB_PATH"
-    cmake --build build
+    (
+        cd "$buildDir" &&
+        ./configure --prefix="$FFTW_PREFIX" --enable-static --disable-shared \
+            --with-pic $simd F77=gfortran > log.configure 2>&1 &&
+        make -j "$NPROCS" > log.make 2>&1 &&
+        make install > log.install 2>&1
+    )
+    if [ $? -ne 0 ]; then
+        echo "ERROR: FFTW build failed, see logs in $buildDir"
+        return 1
+    fi
+    rm -rf "$buildDir"
+    echo "FFTW built: $FFTW_PREFIX/lib/libfftw3.a"
+}
 
-    # Move postG2G to the build directory
-    mv postG2G build/.
-    
-    # Return to the previous directory
-    popd
+function findFFTW()
+{
+    echo "====================================="
+    echo "    FFTW"
+    echo "====================================="
+
+    # 1. User setting, 2. our own earlier build
+    if fftwUsable "$FFTW3_LIB_PATH" "$FFTW3_INCLUDE_PATH"; then
+        :
+    elif fftwUsable "$FFTW_PREFIX/lib"; then
+        :
+    else
+        # 3. Loaded modules, pkg-config and standard system locations
+        local candidates=""
+        local v
+        for v in FFTW_LIB FFTW3_LIB FFTW_LIBDIR FFTW_LIB_DIR; do
+            [ -n "${!v}" ] && candidates="$candidates ${!v}"
+        done
+        for v in FFTWDIR FFTW_DIR FFTW_ROOT FFTW3_ROOT FFTW_HOME EBROOTFFTW; do
+            [ -n "${!v}" ] && candidates="$candidates ${!v} ${!v}/lib ${!v}/lib64"
+        done
+        # Module systems often expose FFTW only through these search paths
+        local p
+        for p in $(echo "$LIBRARY_PATH:$LD_LIBRARY_PATH:$CMAKE_PREFIX_PATH" | tr ':' ' '); do
+            case "$p" in
+                *fftw*|*FFTW*) candidates="$candidates $p $p/lib $p/lib64 ${p%/cmake*}" ;;
+            esac
+        done
+        if command -v pkg-config > /dev/null; then
+            candidates="$candidates $(pkg-config --variable=libdir fftw3 2>/dev/null)"
+        fi
+        candidates="$candidates /usr/lib64 /usr/lib/$(uname -m)-linux-gnu /usr/local/lib /usr/local/lib64 /usr/lib"
+
+        local found=0
+        local d
+        for d in $candidates; do
+            if fftwUsable "$d"; then
+                found=1
+                break
+            fi
+        done
+
+        # 4. Build it ourselves
+        if [ $found -eq 0 ]; then
+            echo "  No usable static FFTW found on this machine."
+            buildFFTW || return 1
+            fftwUsable "$FFTW_PREFIX/lib" || return 1
+        fi
+    fi
+
+    echo "  Using FFTW library: $FFTW_LIB/libfftw3.a"
+    echo "  Using FFTW include: $FFTW_INC"
+    echo ""
+}
+
+##############################################################################
+## Grid2Grid
+##############################################################################
+
+function Grid2GridInstall()
+{
+    local srcDir="$THIRDPARTY_DIR/Grid2Grid"
+    local library="$FOAM_USER_LIBBIN/libGrid2Grid.so"
+
+    echo "====================================="
+    echo "    GRID2GRID"
+    echo "====================================="
+
+    if [ -f "$library" ]; then
+        echo "libGrid2Grid.so is already present in \$FOAM_USER_LIBBIN, skipping."
+        echo "(Run ThirdParty/Allclean to force a rebuild.)"
+        return 0
+    fi
+
+    if [ ! -d "$srcDir" ] || [ -z "$(ls -A "$srcDir")" ]; then
+        echo "Grid2Grid source not found. Fetching it..."
+        if [ -e "$THIRDPARTY_DIR/../.git" ]; then
+            (cd "$THIRDPARTY_DIR/.." && git submodule update --init ThirdParty/Grid2Grid)
+        else
+            git clone https://github.com/LHEEA/Grid2Grid.git "$srcDir"
+        fi
+        if [ ! -f "$srcDir/CMakeLists.txt" ]; then
+            echo "ERROR: could not get the Grid2Grid source"
+            return 1
+        fi
+    fi
+
+    findFFTW || return 1
+
+    # Grid2GridOptions.cmake hard-codes the developer's FFTW path. Passing the
+    # library as a cache entry overrides it without editing the submodule.
+    local buildDir="$srcDir/build"
+    rm -rf "$buildDir" "$srcDir/lib"
+    cmake -S "$srcDir" -B "$buildDir" \
+        -DBUILD_OF_LIB=ON \
+        -DCMAKE_Fortran_COMPILER=gfortran \
+        -DFFTW_LIB_FLAG="$FFTW_LIB/libfftw3.a" \
+        -DCMAKE_Fortran_STANDARD_INCLUDE_DIRECTORIES="$FFTW_INC" \
+        || return 1
+    # Serial on purpose: libGrid2Grid and postG2G compile the same Fortran
+    # modules into one directory, so a parallel build races on the .mod files
+    cmake --build "$buildDir" || return 1
+
+    # postG2G (stand-alone post-processor) is written next to the sources
+    if [ -f "$srcDir/postG2G" ]; then
+        mv -f "$srcDir/postG2G" "$buildDir/"
+    fi
 }
 
 Grid2GridInstall
-GRID2GRID_BUILD_RESULT=$?
-
-# CRITICAL: Verify libGrid2Grid.so was actually created
-if [ $GRID2GRID_BUILD_RESULT -ne 0 ]; then
+if [ $? -ne 0 ] || [ ! -f "$FOAM_USER_LIBBIN/libGrid2Grid.so" ]; then
     echo ""
     echo "========== ERROR =========="
-    echo "Grid2Grid build failed (returned error code $GRID2GRID_BUILD_RESULT)"
-    echo "Compilation STOPPED"
-    echo "=============================="
+    echo "Grid2Grid build failed: $FOAM_USER_LIBBIN/libGrid2Grid.so was not created."
+    echo "See the messages above."
+    echo "==========================="
     echo ""
     exit 1
 fi
 
-if [ ! -f "$FOAM_USER_LIBBIN/libGrid2Grid.so" ]; then
-    echo ""
-    echo "========== ERROR =========="
-    echo "libGrid2Grid.so NOT FOUND after build!"
-    echo "Expected location: $FOAM_USER_LIBBIN/libGrid2Grid.so"
-    echo "Compilation STOPPED"
-    echo ""
-    echo "Check build log for cmake/compilation errors above."
-    echo "=============================="
-    echo ""
-    exit 1
-fi
-
-echo "✓ libGrid2Grid.so successfully created at: $FOAM_USER_LIBBIN/libGrid2Grid.so"
+echo "libGrid2Grid.so: $FOAM_USER_LIBBIN/libGrid2Grid.so"
 echo ""
 
+##############################################################################
+## fenton4Foam
+##############################################################################
+
 echo "====================================="
-echo "    COMPILE FENTON4FOAM"
+echo "    FENTON4FOAM"
 echo "====================================="
 
 fentonName="fenton4Foam"
 
 if [ ! -f "$WAVES_APPBIN/$fentonName" ]
 then
-    echo
     echo "Compiling fenton4Foam"
-    echo
-    cd $fentonName
-    gfortran -o $WAVES_APPBIN/$fentonName $fentonName.f fft.f
-    cd $OLDPWD
+    (cd "$THIRDPARTY_DIR/$fentonName" && gfortran -o "$WAVES_APPBIN/$fentonName" $fentonName.f fft.f) || exit 1
 else
-    echo
     echo "fenton4Foam has already been compiled"
-    echo
 fi
+echo ""

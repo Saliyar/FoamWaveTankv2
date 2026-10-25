@@ -5,15 +5,23 @@ exec 1> >(tee log.build)
 exec 2>&1
 
 ##############################################################################
-## USER CONFIGURATION - Override FFTW library location if needed
-##############################################################################
-# Leave empty to auto-detect (recommended for servers with module system)
-# Or set to your custom FFTW library path, e.g.:
-#   USER_FFTW3_LIB_PATH="/usr/local/fftw/lib"
-#   USER_FFTW3_LIB_PATH="/home/user/fftw-3.3.10/lib"
-#   USER_FFTW3_LIB_PATH="/appl/fftw/lib"
+## Usage:  ./Allwmake [-j N]
+##
+## Only OpenFOAM, gcc/gfortran, cmake and GSL are needed. FFTW is found
+## automatically, or built once from source (see ThirdParty/Allwmake).
+##
+## USER CONFIGURATION - optional, leave empty for automatic detection
+##   Directory holding libfftw3.a, e.g. "/appl/fftw/3.3.10/lib"
 USER_FFTW3_LIB_PATH=""
 ##############################################################################
+
+# Parallel compilation: "-j N", else WM_NCOMPPROCS, else all cores.
+# wmake picks up WM_NCOMPPROCS for every library and solver below.
+if [ "$1" = "-j" ] && [ -n "$2" ]; then
+    export WM_NCOMPPROCS="$2"
+elif [ -z "$WM_NCOMPPROCS" ]; then
+    export WM_NCOMPPROCS="$(nproc 2>/dev/null || echo 2)"
+fi
 
 # Timing
 BUILD_START=$(date +%s)
@@ -37,78 +45,46 @@ fi
 ## Set environmental variables
 . ./bin/bashrc
 
-## Detect server vs local installation and handle FFTW
-echo "====================================="
-echo "    CHECKING FFTW AVAILABILITY"
-echo "====================================="
-
-# If user set custom FFTW path, use that
 if [ -n "$USER_FFTW3_LIB_PATH" ]; then
-    echo "User-specified FFTW path detected"
     export FFTW3_LIB_PATH="$USER_FFTW3_LIB_PATH"
-    echo "  Using FFTW from: $FFTW3_LIB_PATH"
-
-    if [ ! -f "$FFTW3_LIB_PATH/libfftw3.a" ]; then
-        echo ""
-        echo "ERROR: libfftw3.a not found at $FFTW3_LIB_PATH"
-        echo "  Check USER_FFTW3_LIB_PATH setting in Allwmake"
-        echo ""
-        exit 1
-    fi
-
-# Check if module command is available (server installation indicator)
-elif command -v module &> /dev/null; then
-    echo "Server installation detected (module command available)"
-
-    # Try to load FFTW module
-    if module load fftw3/3.3.10 2>/dev/null; then
-        echo "✓ FFTW3/3.3.10 module loaded successfully"
-        export FFTW3_LIB_PATH="${FFTW3_LIB_PATH}"
-        echo "  Using FFTW from: $FFTW3_LIB_PATH"
-
-        # Verify libfftw3.a actually exists at this path
-        if [ ! -f "$FFTW3_LIB_PATH/libfftw3.a" ]; then
-            echo ""
-            echo "ERROR: libfftw3.a not found at $FFTW3_LIB_PATH"
-            echo "  Module loaded but library missing or path incorrect"
-            echo ""
-            exit 1
-        fi
-    else
-        echo "✗ FFTW3/3.3.10 module not available"
-        echo "  Checking for local libfftw3.a..."
-        if [ ! -f "/usr/lib64/libfftw3.a" ] && [ ! -f "/usr/local/lib/libfftw3.a" ]; then
-            echo ""
-            echo "ERROR: FFTW3 static library (libfftw3.a) not found!"
-            echo "  - Try loading module: module load fftw3"
-            echo "  - Or install: sudo yum install fftw-static"
-            echo "  - Or set USER_FFTW3_LIB_PATH in Allwmake"
-            echo ""
-            exit 1
-        fi
-    fi
-else
-    echo "Local PC installation detected (no module command)"
-    echo "  Checking for libfftw3.a in standard locations..."
-
-    if [ -f "/usr/lib64/libfftw3.a" ]; then
-        export FFTW3_LIB_PATH="/usr/lib64"
-        echo "  ✓ Found at: $FFTW3_LIB_PATH/libfftw3.a"
-    elif [ -f "/usr/local/lib/libfftw3.a" ]; then
-        export FFTW3_LIB_PATH="/usr/local/lib"
-        echo "  ✓ Found at: $FFTW3_LIB_PATH/libfftw3.a"
-    else
-        echo "  ✗ libfftw3.a not found in standard locations"
-        echo ""
-        echo "ERROR: FFTW3 static library required for Grid2Grid build"
-        echo "  Install with: sudo yum install fftw-static"
-        echo "  Or set USER_FFTW3_LIB_PATH in Allwmake"
-        echo ""
-        exit 1
-    fi
 fi
 
+## Check prerequisites before compiling anything
 echo "====================================="
+echo "    CHECKING PREREQUISITES"
+echo "====================================="
+missing=""
+if [ -z "$WM_PROJECT_DIR" ] || [ -z "$FOAM_USER_LIBBIN" ] || ! command -v wmake > /dev/null; then
+    missing="$missing\n  - OpenFOAM environment: source OpenFOAM first (module load ... or . <OpenFOAM>/etc/bashrc)"
+fi
+for tool in gcc g++ gfortran cmake make tar; do
+    if ! command -v $tool > /dev/null; then
+        missing="$missing\n  - $tool"
+    fi
+done
+if [ -n "$missing" ]; then
+    echo ""
+    echo -e "ERROR: missing prerequisites:$missing"
+    echo ""
+    echo "  Ubuntu/Debian: sudo apt install build-essential gfortran cmake libgsl-dev"
+    echo "  RHEL/Rocky:    sudo dnf install gcc gcc-c++ gcc-gfortran cmake gsl-devel"
+    echo "  Cluster:       module load gcc cmake gsl (names differ per cluster)"
+    echo ""
+    exit 1
+fi
+
+gslFound=0
+for d in "$WAVES_GSL_INCLUDE" /usr/include /usr/local/include $(echo "$CPATH:$C_INCLUDE_PATH" | tr ':' ' '); do
+    [ -f "$d/gsl/gsl_math.h" ] && gslFound=1 && break
+done
+if [ $gslFound -eq 0 ] && command -v gsl-config > /dev/null; then
+    gslFound=1
+fi
+if [ $gslFound -eq 0 ]; then
+    echo "WARNING: GSL headers (gsl/gsl_math.h) not found. If the library build fails,"
+    echo "  install libgsl-dev / gsl-devel, or set WAVES_GSL_INCLUDE and WAVES_GSL_LIB in bin/bashrc"
+fi
+echo "OpenFOAM $WM_PROJECT_VERSION, compiling with $WM_NCOMPPROCS parallel jobs"
 echo ""
 
 ## Check if WAVES_DIR exists
@@ -147,16 +123,17 @@ then
     mkdir -p $WAVES_LIBBIN
 fi
 
-## Ensure git submodules are initialized and updated to latest remote
-if [ -f ".gitmodules" ]; then
-    echo "Syncing submodule configuration..."
+## Fetch git submodules at the commits pinned by this repository, so every
+## install builds the same Grid2Grid and FloatStepper. To move a submodule to
+## its latest upstream version instead: git submodule update --remote <path>
+if [ -f ".gitmodules" ] && [ -e ".git" ]; then
+    echo "Fetching git submodules..."
     git submodule sync --recursive
-    echo "Updating git submodules to latest remote..."
-    git submodule update --init --remote
+    git submodule update --init
 fi
 
 ## COMPILE THIRD PARTY DEPENDENCIES
-(cd ThirdParty; ./Allwmake -j 2)
+(cd ThirdParty; ./Allwmake -j "$WM_NCOMPPROCS")
 
 if [[ $? -ne 0 ]]
 then
@@ -164,14 +141,14 @@ then
     echo "Problems with the compilation of the third party dependencies"
     echo "Exiting"
     echo ""
-    exit
+    exit 1
 fi
 
 ## LIBRARY
 echo "====================================="
 echo "    COMPILE LIBRARY"
 echo "====================================="
-( cd src; ./Allwmake -j 2)
+( cd src; ./Allwmake )
 if [ $? -ne 0 ]; then
     echo ""
     echo "ERROR: src build failed"

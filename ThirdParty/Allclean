@@ -1,3 +1,12 @@
 #!/bin/bash
-rm -rf Grid2Grid
-rm -f $WAVES_LIBBIN/libGrid2Grid.so
+## Removes the Grid2Grid build so the next ./Allwmake rebuilds it.
+## The Grid2Grid source (git submodule) and the FFTW built in ThirdParty/fftw
+## are kept. Use "./Allclean -all" to remove the local FFTW build as well.
+cd "${0%/*}" || exit 1
+
+rm -rf Grid2Grid/build Grid2Grid/lib Grid2Grid/postG2G
+rm -f "$FOAM_USER_LIBBIN/libGrid2Grid.so"
+
+if [ "$1" = "-all" ]; then
+    rm -rf fftw
+fi
