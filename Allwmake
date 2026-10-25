@@ -244,6 +244,25 @@ else
     echo "WARNING: floatStepperWaveFoam directory not found"
 fi
 
+# Compile MoorDyn restraints for sixDoFRigidBodyMotion (waveFoam, waveIsoFoam)
+echo ""
+echo "====================================="
+echo "    COMPILE MOORDYN SIXDOF RESTRAINTS"
+echo "====================================="
+if [ -f "$FOAM_USER_LIBBIN/libmoordyn_v1.so" ]
+then
+    ( cd src/moorDynSixDoF/moorDynR1; wmake libso )
+else
+    echo "WARNING: libmoordyn_v1.so not found, skipping moorDynR1SixDoF"
+fi
+if [ -f "$FOAM_USER_LIBBIN/libmoordyn.so" ] \
+&& [ -d "applications/solvers/floatStepperWaveFoam/ThirdParty/MoorDyn/submodules/MoorDyn.build/include/moordyn" ]
+then
+    ( cd src/moorDynSixDoF/moorDynR2; wmake libso )
+else
+    echo "WARNING: libmoordyn.so or MoorDyn v2 headers not found, skipping moorDynR2SixDoF"
+fi
+
 ## UTILITIES
 # Pre-processing utilities
 echo ""

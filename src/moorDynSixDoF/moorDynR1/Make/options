@@ -1,0 +1,13 @@
+EXE_INC = \
+    -DLINUX \
+    -I$(LIB_SRC)/finiteVolume/lnInclude \
+    -I$(LIB_SRC)/meshTools/lnInclude \
+    -I$(LIB_SRC)/sixDoFRigidBodyMotion/lnInclude \
+    -I../../../applications/solvers/floatStepperWaveFoam/ThirdParty/MoorDyn/submodules/MoorDyn_v1
+
+LIB_LIBS = \
+    -lfiniteVolume \
+    -lmeshTools \
+    -lsixDoFRigidBodyMotion \
+    -L$(FOAM_USER_LIBBIN) \
+    -lmoordyn_v1
