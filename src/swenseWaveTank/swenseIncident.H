@@ -53,6 +53,7 @@ SourceFiles
 #include "surfaceInterpolate.H"
 #include "fvc.H"
 #include "Grid2Grid.H"
+#include "swenseRamp.H"
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -83,6 +84,14 @@ class swenseIncident
         //- Mean water level and water density
         const scalar seaLevel_;
         const scalar rhoWater_;
+
+        //- Start-up ramp time (rampTsoft, 0 = none) and the simulation time
+        //  of the last update (the Air2Air time is shifted by referenceTime)
+        const scalar Tsoft_;
+        scalar tNow_;
+
+        //- Start-up ramp factor f(t) of all incident values
+        scalar ramp(const scalar t) const;
 
         //- Blending thickness delta (m)
         const scalar delta_;

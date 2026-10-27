@@ -6,6 +6,7 @@
 #include "fvPatchFieldMapper.H"
 #include "volFields.H"
 #include "swenseSurface.H"
+#include "swenseRamp.H"
 #include "IOdictionary.H"
 
 // * * * * * * * * * * * * * * * * * Constructors * * * * * * * * * * * * * * //
@@ -108,6 +109,8 @@ void Foam::swenseWaveVelocityFvPatchVectorField::updateCoeffs()
     const vector wind = pDict.lookupOrDefault<vector>("wind", vector::zero);
 
     swenseSurface surf(mesh, ext, t);
+    const scalar Tsoft = swenseRamp::Tsoft(mesh.thisDb());
+    const scalar f = swenseRamp::factor(Tsoft, t);
 
     const scalarField& magSf = this->patch().magSf();
     const label start = this->patch().patch().start();
@@ -126,6 +129,11 @@ void Foam::swenseWaveVelocityFvPatchVectorField::updateCoeffs()
         else
         {
             patchU[facei] = ext.U(surf.wetCentre(faceID), t);
+
+            if (Tsoft > 0)
+            {
+                patchU[facei] *= f;
+            }
         }
     }
 

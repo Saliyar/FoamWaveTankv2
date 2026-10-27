@@ -14,7 +14,8 @@ Foam::swenseSurface::swenseSurface
 :
     convexPolyhedral(mesh, true),
     ext_(ext),
-    t_(t)
+    t_(t),
+    Tsoft_(swenseRamp::Tsoft(mesh.thisDb()))
 {}
 
 
@@ -44,6 +45,11 @@ Foam::scalar Foam::swenseSurface::signedPointToSurfaceDistance
     const point& pp
 ) const
 {
+    if (Tsoft_ > 0)
+    {
+        return pp.z() - swenseRamp::factor(Tsoft_, t_)*ext_.eta(pp, t_);
+    }
+
     return pp.z() - ext_.eta(pp, t_);
 }
 

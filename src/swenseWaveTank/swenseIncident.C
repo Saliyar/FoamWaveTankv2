@@ -132,6 +132,8 @@ Foam::swenseIncident::swenseIncident
         mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
             .lookupOrDefault<scalar>("seaLevel", 0.0)
     ),
+    Tsoft_(swenseRamp::Tsoft(mesh.thisDb())),
+    tNow_(0.0),
     rhoWater_(rhoWater.value()),
     delta_(blendThickness(mesh.thisDb())),
     guard_(0.0),
@@ -186,13 +188,14 @@ Foam::swenseIncident::swenseIncident
     Info<< "SWENSE guard: delta = " << delta_ << " m, dz at interface = "
         << dzInterface << " m, guard d_g = " << guard_ << " m" << endl;
 
-    // The SWENSE path needs the dynamic pressure without the soft start
-    // (the analytic theory checks its own Tsoft in waveTheoryForcing)
+    // The Grid2Grid soft start would be applied twice with the SWENSE ramp
+    // (rampTsoft in waveProperties, applied once in swenseIncident). The
+    // analytic theory checks its own Tsoft in waveTheoryForcing
     if (grid2GridCoeffsFor(mesh.thisDb(), ext_).lookupOrDefault<scalar>("Tsoft", 0.0) > SMALL)
     {
         FatalErrorInFunction
-            << "swenseWaveFoam requires Grid2GridCoeffs Tsoft = 0"
-            << exit(FatalError);
+            << "swenseWaveFoam requires Grid2GridCoeffs Tsoft = 0; use rampTsoft"
+            << " in waveProperties for the start-up ramp" << exit(FatalError);
     }
 
     // The Grid2Grid pExcess is used with g z measured from the origin
@@ -417,6 +420,11 @@ Foam::vector Foam::swenseIncident::waterU
     const scalar t
 ) const
 {
+    if (Tsoft_ > 0)
+    {
+        return ramp(t)*ext_.U(x, t);
+    }
+
     return ext_.U(x, t);
 }
 
@@ -430,6 +438,11 @@ Foam::scalar Foam::swenseIncident::waterP
     // pExcess is the dynamic pressure per unit water density; the
     // hydrostatic term uses the wave-frame height (rotation keeps z)
     const scalar zw = (x - refPos_).z();
+
+    if (Tsoft_ > 0)
+    {
+        return rhoWater_*(ramp(t)*ext_.pExcess(x, t) - magG_*zw);
+    }
 
     return rhoWater_*(ext_.pExcess(x, t) - magG_*zw);
 }
@@ -456,9 +469,23 @@ Foam::vector Foam::swenseIncident::airUP
     scalar Pd;
     air_->solver().flowTables(airIx_[ip], airIy_[ip], airIz_[ip], Uw, Pd);
 
+    // Air2Air part ramped; the hydrostatic part is not
+    if (Tsoft_ > 0)
+    {
+        const scalar f = ramp(tNow_);
+        Pd *= f;
+        Uw *= f;
+    }
+
     p = Pd - rhoAir_*magG_*zw;
 
     return toMesh(Uw);
+}
+
+
+Foam::scalar Foam::swenseIncident::ramp(const scalar t) const
+{
+    return swenseRamp::factor(Tsoft_, t);
 }
 
 
@@ -467,6 +494,11 @@ Foam::scalar Foam::swenseIncident::etaAt(const label ip, const scalar t) const
     if (etaTime_ == t)
     {
         return fastEval_ ? etaPt_[ip] : etaVal_[etaIdx_[ip]];
+    }
+
+    if (Tsoft_ > 0)
+    {
+        return ramp(t)*ext_.eta(pts_[ip], t);
     }
 
     return ext_.eta(pts_[ip], t);
@@ -658,6 +690,7 @@ void Foam::swenseIncident::update
 
     // Grid2Grid time is t + referenceTime; Air2Air uses the same time
     const scalar tAir = t + refTime_;
+    tNow_ = t;
 
     if (air_.valid())
     {
@@ -668,6 +701,15 @@ void Foam::swenseIncident::update
     {
         // [option A] Grid2Grid eta, U and pExcess at all stored points, once per step
         g2g_->evaluatePoints(t, etaPt_, UPt_, pExPt_);
+
+        // Start-up ramp on the Grid2Grid values (eta, U, pExcess)
+        if (Tsoft_ > 0)
+        {
+            const scalar f = ramp(t);
+            etaPt_ *= f;
+            UPt_ *= f;
+            pExPt_ *= f;
+        }
         fastEval_ = true;
     }
     else
@@ -677,6 +719,11 @@ void Foam::swenseIncident::update
         forAll(etaPts_, r)
         {
             etaVal_[r] = ext_.eta(etaPts_[r], t);
+
+            if (Tsoft_ > 0)
+            {
+                etaVal_[r] *= ramp(t);
+            }
         }
     }
     etaTime_ = t;
@@ -713,6 +760,11 @@ void Foam::swenseIncident::update
             vector Uw;
             scalar Pd;
             air_->solver().flow(xw.x(), xw.y(), xs.z() - seaLevel_, Uw, Pd);
+            if (Tsoft_ > 0)
+            {
+                Pd *= ramp(t);
+            }
+
             pAs_[r] = Pd - rhoAir_*magG_*zws;
         }
     }

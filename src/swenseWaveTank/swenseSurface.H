@@ -21,6 +21,7 @@ SourceFiles
 
 #include "convexPolyhedral.H"
 #include "externalWaveForcing.H"
+#include "swenseRamp.H"
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -42,6 +43,9 @@ class swenseSurface
 
         //- Time at which the surface is evaluated
         scalar t_;
+
+        //- Start-up ramp time (rampTsoft in waveProperties, 0 = none)
+        const scalar Tsoft_;
 
     // Protected member functions (overrides of convexPolyhedral)
 

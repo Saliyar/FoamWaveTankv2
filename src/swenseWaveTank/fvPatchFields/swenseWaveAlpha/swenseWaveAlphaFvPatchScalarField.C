@@ -6,6 +6,7 @@
 #include "fvPatchFieldMapper.H"
 #include "volFields.H"
 #include "swenseIncident.H"
+#include "swenseRamp.H"
 #include "IOdictionary.H"
 
 // * * * * * * * * * * * * * * * * * Constructors * * * * * * * * * * * * * * //
@@ -92,14 +93,19 @@ void Foam::swenseWaveAlphaFvPatchScalarField::updateCoeffs()
     // Blend weight of the water incident field at the face centres, the
     // same alphaI as the cell field (swenseIncident::blendWeight)
     const scalar delta = swenseIncident::blendThickness(mesh.thisDb());
+    const scalar Tsoft = swenseRamp::Tsoft(mesh.thisDb());
+    const scalar f = swenseRamp::factor(Tsoft, t);
     const vectorField& Cf = this->patch().Cf();
 
     forAll(Cf, facei)
     {
         const point& x = Cf[facei];
 
+        const scalar eta =
+            Tsoft > 0 ? f*ext.eta(x, t) : ext.eta(x, t);
+
         refValue()[facei] =
-            swenseIncident::blendWeight(x.z() - ext.eta(x, t), delta);
+            swenseIncident::blendWeight(x.z() - eta, delta);
     }
 
     refGrad() = 0.0;
