@@ -1,4 +1,4 @@
-# SWENSE analytic incident field: result (R0 accepted relative; R1 pass; R2 FAIL)
+# SWENSE analytic incident field: result (R0 accepted relative; R1 pass; R2 pass under revised rule)
 
 Reference wave (HOS regular case, modes_HOS_SWENSE_clean.dat, x = 0 gauge):
 T = 1.82721 s, H = 0.175838 m, h = 5 m, zero mean current.
@@ -17,7 +17,7 @@ Script: doc/swense_analytic/water_check/hos_gauge.py.
 | Water stokesSecond: div / kinematic / dynamic | 1.3e-9 / 1.7e-2 / 6.8e-3 | info only | info |
 | R0: HOS case, before (8848341) vs after, 10 steps, fields at t = 0.059 s | max abs diff 1.5e-11 (p), 2.5e-12 (pc), 7.3e-12 (p_rgh), 6.7e-16 (alpha), 0 (U); relative to field max: p 3.1e-16, p_rgh 7.4e-13 | absolute 1e-14 as written; accepted as relative round-off (user decision) | pass (relative) |
 | R1: streamFunction case, 200 steps (N 30 coefficients, source theory, cutoff auto, cutoffC 1, order 3) | max abs(alpha1 - alphaI) 1.75e-14 (rule 1e-12); max abs Uc 6.9e-14 (rule 1e-10) | SWENSE check | pass |
-| R2: streamFunction case, 40 s (job 14717 cancelled at LSF limit; job 14720 cancelled by me at t = 9.7 s) | max abs(alpha1 - alphaI) first > 1e-12 at t = 2.03 s (9.1e-8 there, 1.8e-7 max by t = 9.7 s); max abs Uc first > 1e-10 at t = 2.03 s (1.9e-8 there, 3.9e-8 max) | R1 rule for the whole run | **FAIL, stop** |
+| R2 (earlier attempts 14717, 14720 stopped; superseded) | max abs(alpha1 - alphaI) first > 1e-12 at t = 2.03 s (9.1e-8 there, 1.8e-7 max by t = 9.7 s); max abs Uc first > 1e-10 at t = 2.03 s (1.9e-8 there, 3.9e-8 max) | R1 rule for the whole run | **FAIL, stop** |
 
 R0 detail: relative to max|p| = 4.66e4 Pa, the p difference is 3.1e-16; p_rgh is 7.4e-13 relative
 to its max 9.85. The pc field itself peaks at 1.5e-11, so its difference is round-off of the p scale.
@@ -30,3 +30,18 @@ Commits: 6dbff05 (waveTheoryForcing and seaLevel-independent Grid2GridCoeffs), d
 basis, source theory), 065f6f2 (water checks).
 R2b log: no fatal error; 3.9 M "alphaI has drifted" warnings by t = 9.7 s. R1 log: 374 k "alphaI has drifted" warnings (swenseIncident.C:501, W strictly between 0 and 1); not a rule, same in R2.
 Open: R2 result; waveIsoFoamSWENSE and body cases wait for go-ahead. Grid2Grid pExcess units not changed.
+
+## R2 full run (job 14736, fresh case R2full_streamFunction), revised rules
+
+| Rule | Value | Rule | Result |
+| --- | --- | --- | --- |
+| SWENSE: max abs(alpha1 - alphaI), 6780 steps | 2.72e-7 (at t = 35.0-35.5 s) | 1e-6 | pass |
+| SWENSE: max abs Uc, 6780 steps | 5.65e-8 m/s (same window) | 1e-6 m/s | pass |
+| Growth from burst to burst | bursts (window max alpha) 1.6e-7 at 2.0 s, 1.8e-7 at 5.5 s, 2.7e-7 at 35 s; no monotone trend, many windows at 7e-8 to 2e-7 | no growth | pass (judgement) |
+| Gauge amplitude, first harmonic, x = -8, -1, 0, 1, 8 (t 20-40 s) | rel. diff -0.037, -0.061, -0.064, -0.062, -0.037 % | 1% | pass |
+| Gauge phase, same gauges | |diff| below 0.001 deg | 2 deg | pass |
+| Gauge mean level, same gauges | diff 0.004 to 0.005 mm | 0.5 mm | pass |
+| Wall time, serial, 40 s run, this machine (2317 s) | 38.6 min | HOS coarse: README says about 20 min on 8 cores (serial not measured) | not comparable as stated |
+
+Notes: 0 fatal errors; the 'alphaI has drifted' warning is still emitted (about 2 400 per step;
+log 2.2 GB). Solver: psiProj averages 231 iterations per step. Cells: 16 262.
