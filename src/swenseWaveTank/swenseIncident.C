@@ -5,11 +5,18 @@
 #include "IOdictionary.H"
 #include "gravityMeshObject.H"
 #include "Grid2Grid.H"
+#include "waveTheoryForcing.H"
 
 #include <cmath>
 #include <map>
 #include <utility>
 #include <vector>
+
+// Drift of alphaI from eta (weights()): counted there, reported once per call
+// of update() as one log line, instead of one warning per cell
+static Foam::label driftCount = 0;
+static Foam::scalar driftWorstZ = 0.0;
+static Foam::point driftWorstX = Foam::point::zero;
 
 // * * * * * * * * * * * * * * * * Static Member Functions  * * * * * * * * * //
 
@@ -35,15 +42,30 @@ Foam::scalar Foam::swenseIncident::interfaceCellHeight(const fvMesh& mesh)
         }
     }
 
-    Foam::sort(zs);
+    // Heights from every processor: a processor holding part of the mesh
+    // would see a smaller gap, and the guard distance must be the same on all
+    List<scalarList> zsProc(Pstream::nProcs());
+    zsProc[Pstream::myProcNo()] = scalarList(zs);
+    Pstream::allGatherList(zsProc);
+
+    DynamicList<scalar> zsAll;
+    forAll(zsProc, proc)
+    {
+        forAll(zsProc[proc], i)
+        {
+            zsAll.append(zsProc[proc][i]);
+        }
+    }
+
+    Foam::sort(zsAll);
 
     scalar dz = 0.0;
 
-    for (label i = 1; i < zs.size(); ++i)
+    for (label i = 1; i < zsAll.size(); ++i)
     {
-        if (zs[i] - zs[i-1] > SMALL)
+        if (zsAll[i] - zsAll[i-1] > SMALL)
         {
-            dz = max(dz, zs[i] - zs[i-1]);
+            dz = max(dz, zsAll[i] - zsAll[i-1]);
         }
     }
 
@@ -55,6 +77,25 @@ Foam::scalar Foam::swenseIncident::blendThickness(const objectRegistry& db)
 {
     return db.lookupObject<IOdictionary>("waveProperties")
         .lookupOrDefault<scalar>("blendThickness", 0.024);
+}
+
+
+// Grid2GridCoeffs of waveProperties for a Grid2Grid forcing. Any other forcing
+// (for example waveTheoryForcing) is already in CFD coordinates, so an empty
+// dictionary gives the identity wave frame and zero time offset.
+static Foam::dictionary grid2GridCoeffsFor
+(
+    const Foam::objectRegistry& db,
+    const Foam::waveTheories::externalWaveForcing& ext
+)
+{
+    if (dynamic_cast<const Foam::waveTheories::Grid2Grid*>(&ext))
+    {
+        return db.lookupObject<IOdictionary>("waveProperties")
+            .subDict("Grid2GridCoeffs");
+    }
+
+    return Foam::dictionary();
 }
 
 
@@ -73,20 +114,17 @@ Foam::swenseIncident::swenseIncident
     air_(),
     refPos_
     (
-        mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
-            .subDict("Grid2GridCoeffs")
+        grid2GridCoeffsFor(mesh.thisDb(), ext)
             .lookupOrDefault<vector>("referencePosition", vector::zero)
     ),
     theta_
     (
-        mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
-            .subDict("Grid2GridCoeffs")
+        grid2GridCoeffsFor(mesh.thisDb(), ext)
             .lookupOrDefault<scalar>("referenceTheta", 0.0)*M_PI/180.0
     ),
     refTime_
     (
-        mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
-            .subDict("Grid2GridCoeffs")
+        grid2GridCoeffsFor(mesh.thisDb(), ext)
             .lookupOrDefault<scalar>("referenceTime", 0.0)
     ),
     seaLevel_
@@ -149,20 +187,77 @@ Foam::swenseIncident::swenseIncident
         << dzInterface << " m, guard d_g = " << guard_ << " m" << endl;
 
     // The SWENSE path needs the dynamic pressure without the soft start
-    if (wp.subDict("Grid2GridCoeffs").lookupOrDefault<scalar>("Tsoft", 0.0) > SMALL)
+    // (the analytic theory checks its own Tsoft in waveTheoryForcing)
+    if (grid2GridCoeffsFor(mesh.thisDb(), ext_).lookupOrDefault<scalar>("Tsoft", 0.0) > SMALL)
     {
         FatalErrorInFunction
             << "swenseWaveFoam requires Grid2GridCoeffs Tsoft = 0"
             << exit(FatalError);
     }
 
+    // The Grid2Grid pExcess is used with g z measured from the origin
+    if (mag(seaLevel_) > SMALL)
+    {
+        FatalErrorInFunction
+            << "swenseWaveFoam requires seaLevel 0 in waveProperties (found "
+            << seaLevel_ << " m)" << exit(FatalError);
+    }
+
     // Air2Air block (optional), in the farfield coefficients
     if (wp.subDict("farfieldCoeffs").found("Air2Air"))
     {
         const dictionary& a2a = wp.subDict("farfieldCoeffs").subDict("Air2Air");
-        fileName modesFile;
-        a2a.lookup("modesFile") >> modesFile;
-        air_.reset(new Air2AirWrapper(modesFile, a2a));
+        const word source = a2a.lookupOrDefault<word>("source", word("modesFile"));
+
+        if (source == "theory")
+        {
+            // Periodic modes from the wave theory (one period, t = 0)
+            const waveTheories::waveTheoryForcing* wtf =
+                dynamic_cast<const waveTheories::waveTheoryForcing*>(&ext_);
+
+            if (!wtf)
+            {
+                FatalErrorInFunction
+                    << "Air2Air source theory needs externalWaveForcing"
+                    << " waveTheoryForcing" << exit(FatalError);
+            }
+
+            const scalar c = wtf->phaseSpeed();
+            const scalar K = wtf->waveNumber();
+
+            if (c <= 0 || K <= 0)
+            {
+                FatalErrorInFunction
+                    << "Air2Air source theory: the wave theory gives no"
+                    << " phase speed or wave number" << exit(FatalError);
+            }
+
+            // Period length L = N_L wavelength, N_L = 1
+            const scalar Lp = 2*M_PI/K;
+            const label M = a2a.lookupOrDefault<label>("nModes", 64);
+            const label N = 4*M;
+
+            std::vector<scalar> eta(N);
+            for (label i = 0; i < N; ++i)
+            {
+                eta[i] = wtf->eta(point((i + 0.5)*Lp/N, 0, 0), 0.0);
+            }
+
+            // Length scale h = 1/K: the fundamental has k h = 1
+            air_.reset(new Air2AirWrapper("", a2a));
+            air_->setTheory
+            (
+                1.0/K, magG_, c, Lp, eta, M,
+                a2a.lookupOrDefault<word>("cutoff", word("auto")),
+                a2a.lookupOrDefault<scalar>("cutoffC", 0.5)
+            );
+        }
+        else
+        {
+            fileName modesFile;
+            a2a.lookup("modesFile") >> modesFile;
+            air_.reset(new Air2AirWrapper(modesFile, a2a));
+        }
 
         // The Air2Air pressure is -rho_air (psi_t + ...): its density must be
         // the air density of the two-phase model
@@ -409,10 +504,13 @@ void Foam::swenseIncident::weights
 
     if (W > 0 && W < 1 && (zRel > guard_ || zRel < -guard_))
     {
-        WarningInFunction
-            << "W = " << W << " strictly between 0 and 1 at " << x
-            << " with |z - eta| = " << mag(zRel) << " > d_g: alphaI has drifted"
-            << endl;
+        ++driftCount;
+
+        if (mag(zRel) > driftWorstZ)
+        {
+            driftWorstZ = mag(zRel);
+            driftWorstX = x;
+        }
     }
 }
 
@@ -550,6 +648,14 @@ void Foam::swenseIncident::update
     const volScalarField& alphaI
 )
 {
+    // One line for the drift events counted since the previous call
+    Info<< "SWENSE drift: " << driftCount
+        << " alphaI-drift events since the last update, worst |z - eta| = "
+        << driftWorstZ << " m at " << driftWorstX << endl;
+    driftCount = 0;
+    driftWorstZ = 0.0;
+    driftWorstX = Foam::point::zero;
+
     // Grid2Grid time is t + referenceTime; Air2Air uses the same time
     const scalar tAir = t + refTime_;
 

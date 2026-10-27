@@ -1,0 +1,3 @@
+moorDynR2.C
+
+LIB = $(FOAM_USER_LIBBIN)/libmoorDynR2SixDoF
