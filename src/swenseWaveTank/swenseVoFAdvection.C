@@ -26,6 +26,23 @@ void Foam::swenseAdvanceVoF
 (
     volScalarField& alpha,
     const surfaceScalarField& phi,
+    const volVectorField& U,
+    surfaceScalarField& rhoPhi,
+    const dimensionedScalar& rho1,
+    const dimensionedScalar& rho2
+)
+{
+    // Production source: divPhi = div(phi), as before the moving-mesh work
+    const volScalarField divPhi("divPhi", fvc::div(phi));
+
+    swenseAdvanceVoF(alpha, phi, divPhi, U, rhoPhi, rho1, rho2);
+}
+
+
+void Foam::swenseAdvanceVoF
+(
+    volScalarField& alpha,
+    const surfaceScalarField& phi,
     const volScalarField& divPhi,
     const volVectorField& U,
     surfaceScalarField& rhoPhi,

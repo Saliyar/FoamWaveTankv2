@@ -40,9 +40,21 @@ tmp<volScalarField> swenseRho
 );
 
 //- Advance the volume fraction alpha from its old-time value with the flux
-//  phi relative to the mesh (VoF scheme of OpenFOAM alphaEqn.H, Euler time).
-//  divPhi is the divergence of the absolute flux (phi + meshPhi). Returns the
-//  mass flux
+//  phi (VoF scheme of OpenFOAM alphaEqn.H, Euler time). The source is
+//  div(phi). Returns the mass flux (production path, static mesh)
+void swenseAdvanceVoF
+(
+    volScalarField& alpha,
+    const surfaceScalarField& phi,
+    const volVectorField& U,
+    surfaceScalarField& rhoPhi,
+    const dimensionedScalar& rho1,
+    const dimensionedScalar& rho2
+);
+
+//- As above, with the source divPhi given by the caller. On a moving mesh
+//  phi is relative to the mesh and divPhi is the divergence of the absolute
+//  flux (phi + meshPhi).
 void swenseAdvanceVoF
 (
     volScalarField& alpha,
