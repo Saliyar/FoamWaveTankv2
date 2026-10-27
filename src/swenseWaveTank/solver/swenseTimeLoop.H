@@ -14,12 +14,21 @@ while (runTime.run())
     // Grid2Grid record update for this time step (as waveFoam does)
     externalWave->step();
 
-    // Pressure-velocity PIMPLE loop. The mesh moves at the first outer
+    // Static mesh: incident fields once per time step, before the PIMPLE loop,
+    // in the production order. A dynamic mesh (even at rest) follows the mesh
+    // in the outer loop below. The mesh type decides, not mesh.moving(), which
+    // is only valid after mesh.update().
+    if (!mesh.dynamic())
+    {
+        #include "swenseIncidentStep.H"
+    }
+
+    // Pressure-velocity PIMPLE loop. A dynamic mesh moves at the first outer
     // corrector, and at every corrector when moveMeshOuterCorrectors is on
     // (as waveFoam). The incident fields follow the mesh (document 16.3.5).
     while (pimple.loop())
     {
-        if (pimple.firstIter() || moveMeshOuterCorrectors)
+        if (mesh.dynamic() && (pimple.firstIter() || moveMeshOuterCorrectors))
         {
             mesh.update();
 
