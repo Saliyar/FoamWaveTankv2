@@ -61,3 +61,8 @@ added to the alpha.water.* and alphaI.* dictionaries (the tutorial lacks them; t
 | Wall time, serial, 40 s (1798 s) | 30.0 min (VoF R2 full: 38.6 min) | HOS coarse: about 20 min on 8 cores (serial not measured) | not comparable as stated |
 
 Fatal errors: 0. Drift warnings: 5 865 over the run (VoF: about 3.9 M by 9.7 s, so far fewer).
+
+## stokesFifth, waveFoamSWENSE, 200 steps (case R1_stokesFifth)
+phaseSpeed() = omega/K and waveNumber() = K added to stokesFifth and stokesSecond (headers only).
+max|alpha1 - alphaI| = 1.5e-14, max|Uc| = 5.2e-14 (R1 rules 1e-12 / 1e-10): pass. Fatal errors: 0.
+Air2Air: source theory, L = 5.261 m, retained 10 of 64 modes. stokesSecond: not run (per instruction).
