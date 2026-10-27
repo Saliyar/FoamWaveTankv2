@@ -1,0 +1,25 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      waveProperties.input;
+}
+seaLevel        0;
+externalForcing waveTheoryForcing;
+waveTheoryForcingCoeffs
+{
+    waveType        streamFunction;
+    N               30;
+    Niter           100;
+    depth           5;
+    phi             0;
+    height          0.17583825;
+    specifyPeriod   true;
+    period          1.82720801;
+    specifyEuler    true;
+    eulerVelocity   0;
+    direction       (1 0 0);
+    Tsoft           0;
+    debug           false;
+}
