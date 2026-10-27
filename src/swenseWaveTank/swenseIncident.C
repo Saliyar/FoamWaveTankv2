@@ -12,6 +12,12 @@
 #include <utility>
 #include <vector>
 
+// Drift of alphaI from eta (weights()): counted there, reported once per call
+// of update() as one log line, instead of one warning per cell
+static Foam::label driftCount = 0;
+static Foam::scalar driftWorstZ = 0.0;
+static Foam::point driftWorstX = Foam::point::zero;
+
 // * * * * * * * * * * * * * * * * Static Member Functions  * * * * * * * * * //
 
 Foam::scalar Foam::swenseIncident::blendWeight
@@ -498,10 +504,13 @@ void Foam::swenseIncident::weights
 
     if (W > 0 && W < 1 && (zRel > guard_ || zRel < -guard_))
     {
-        WarningInFunction
-            << "W = " << W << " strictly between 0 and 1 at " << x
-            << " with |z - eta| = " << mag(zRel) << " > d_g: alphaI has drifted"
-            << endl;
+        ++driftCount;
+
+        if (mag(zRel) > driftWorstZ)
+        {
+            driftWorstZ = mag(zRel);
+            driftWorstX = x;
+        }
     }
 }
 
@@ -613,6 +622,14 @@ void Foam::swenseIncident::update
     const volScalarField& alphaI
 )
 {
+    // One line for the drift events counted since the previous call
+    Info<< "SWENSE drift: " << driftCount
+        << " alphaI-drift events since the last update, worst |z - eta| = "
+        << driftWorstZ << " m at " << driftWorstX << endl;
+    driftCount = 0;
+    driftWorstZ = 0.0;
+    driftWorstX = Foam::point::zero;
+
     // Grid2Grid time is t + referenceTime; Air2Air uses the same time
     const scalar tAir = t + refTime_;
 
