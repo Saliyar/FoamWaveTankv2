@@ -45,3 +45,19 @@ Open: R2 result; waveIsoFoamSWENSE and body cases wait for go-ahead. Grid2Grid p
 
 Notes: 0 fatal errors; the 'alphaI has drifted' warning is still emitted (about 2 400 per step;
 log 2.2 GB). Solver: psiProj averages 231 iterations per step. Cells: 16 262.
+
+## waveIsoFoamSWENSE (isoAdvector), streamFunction case, full 40 s (job 14860, case R2iso_full)
+
+Case: tutorial waveIsoFoamSWENSE_coarse with the R2 waveProperties; fvSolution: cAlpha 1 and icAlpha 0
+added to the alpha.water.* and alphaI.* dictionaries (the tutorial lacks them; the base class needs them).
+
+| Rule | Value | Rule | Result |
+| --- | --- | --- | --- |
+| SWENSE: max abs(alpha1 - alphaI), 6780 steps | 0 | 1e-6 | pass |
+| SWENSE: max abs Uc | 0 m/s | 1e-6 m/s | pass |
+| Gauge amplitude, x = -8, -1, 0, 1, 8 (t 20-40 s) | -0.033, -0.032, -0.036, -0.033, -0.034 % | 1% | pass |
+| Gauge phase | |diff| below 0.001 deg | 2 deg | pass |
+| Gauge mean level | diff 0.001 to 0.002 mm | 0.5 mm | pass |
+| Wall time, serial, 40 s (1798 s) | 30.0 min (VoF R2 full: 38.6 min) | HOS coarse: about 20 min on 8 cores (serial not measured) | not comparable as stated |
+
+Fatal errors: 0. Drift warnings: 5 865 over the run (VoF: about 3.9 M by 9.7 s, so far fewer).
