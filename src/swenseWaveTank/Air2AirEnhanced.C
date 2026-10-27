@@ -220,9 +220,10 @@ Air2AirEnhanced::Air2AirEnhanced(const string& modesFile, const dictionary& dict
     kcut_(0), etaMax_(0), Mx_(0), My_(0),
     printed_(false),
     w0_(0), w0t_(0),
-    updated_(false)
+    updated_(false),
+    theory_(dict.lookupOrDefault<word>("source", word("modesFile")) == "theory")
 {
-    if (!in_.good())
+    if (!theory_ && !in_.good())
     {
         FatalErrorInFunction << "Cannot open modes file " << file_ << exit(FatalError);
     }
@@ -237,6 +238,8 @@ Air2AirEnhanced::Air2AirEnhanced(const string& modesFile, const dictionary& dict
         FatalErrorInFunction << "pressureModel must be linear or bernoulli" << exit(FatalError);
     }
 
+    if (!theory_)
+    {
     // Header: record 0 holds n1, n3_add, n2, dt*, T_stop*, xlen*, ylen*, h[m]
     reclen_ = 18*8;
     std::vector<scalar> hd;
@@ -253,6 +256,7 @@ Air2AirEnhanced::Air2AirEnhanced(const string& modesFile, const dictionary& dict
     }
 
     setupCutoff(dict);
+    }
 
     cache_.assign(nSaveRecords, slot());
     for (slot& c : cache_) c.index = -1;
@@ -421,6 +425,38 @@ void Air2AirEnhanced::update(scalar t)
 {
     const scalar Ts = std::sqrt(h_/g_);
 
+    if (theory_)
+    {
+        // A steady travelling wave, eta(x - c t): the mode with wave number
+        // k_m keeps its shape and its cos/sin coefficients rotate with phase
+        // omega_m t, omega_m = c k_m (nondimensional, t in units of Ts):
+        //   A(t) = A0 cos - B0 sin,  B(t) = A0 sin + B0 cos
+        //   dA/dt = -omega B(t),     dB/dt = +omega A(t)
+        const scalar tn = t/Ts;
+        const int M = A0_.size();
+
+        A_.assign(M, 0.0);
+        B_.assign(M, 0.0);
+        At_.assign(M, 0.0);
+        Bt_.assign(M, 0.0);
+
+        for (int m = 1; m < M; ++m)
+        {
+            const scalar th = omegaNd_[m]*tn;
+            const scalar cs = std::cos(th), sn = std::sin(th);
+            A_[m] = A0_[m]*cs - B0_[m]*sn;
+            B_[m] = A0_[m]*sn + B0_[m]*cs;
+            At_[m] = -omegaNd_[m]*B_[m];
+            Bt_[m] = omegaNd_[m]*A_[m];
+        }
+
+        // Mean level and mean eta_t are zero for the theories used here
+        w0_ = 0.0;
+        w0t_ = 0.0;
+        updated_ = true;
+        return;
+    }
+
     // Grid2Grid window: correctIdx = ceiling(t/dt), start = correctIdx - nBand,
     // clamped to the records (hosVol2Vol.inc)
     int iLeft = int(std::ceil(std::max(t, scalar(0))/dtRecord)) - nBandRecords;
@@ -489,6 +525,133 @@ void Air2AirEnhanced::update(scalar t)
 }
 
 
+void Air2AirEnhanced::setTheory
+(
+    scalar h,
+    scalar g,
+    scalar c,
+    scalar Lp,
+    const std::vector<scalar>& eta,
+    int M,
+    const std::string& cutoff,
+    scalar cutoffC
+)
+{
+    if (!theory_)
+    {
+        FatalErrorInFunction
+            << "Air2AirEnhanced::setTheory needs source theory"
+            << exit(FatalError);
+    }
+
+    if (M < 2 || int(eta.size()) != 4*M)
+    {
+        FatalErrorInFunction
+            << "setTheory: need M >= 2 and 4 M eta samples" << exit(FatalError);
+    }
+
+    // Nondimensional frame: length h, time sqrt(h/g). The period Lp maps to
+    // xlen = Lnd/2, so kx_m = m pi/xlen = 2 pi m/Lnd (same as the cosine code)
+    h_ = h;
+    g_ = g;
+    const scalar Lnd = Lp/h_;
+    const int N = 4*M;
+    xlen_ = 0.5*Lnd;
+    ylen_ = 1.0;
+    Mx_ = M;
+    My_ = 1;
+    cutoff_ = cutoff;
+
+    const scalar cNd = c/std::sqrt(g_*h_);
+
+    omegaNd_.assign(M, 0.0);
+    for (int m = 0; m < M; ++m)
+    {
+        omegaNd_[m] = cNd*2.0*M_PI*m/Lnd;
+    }
+
+    // Exact projection of eta on the period (midpoint grid, Nq = 4 M)
+    std::vector<scalar> en(N), ec(M, 0.0), es(M, 0.0);
+    scalar etaMax = 0.0;
+    for (int i = 0; i < N; ++i)
+    {
+        en[i] = eta[i]/h_;
+        etaMax = std::max(etaMax, std::fabs(en[i]));
+    }
+
+    for (int m = 0; m < M; ++m)
+    {
+        const scalar km = 2.0*M_PI*m/Lnd;
+        scalar sc = 0.0, ss = 0.0;
+        for (int i = 0; i < N; ++i)
+        {
+            const scalar xi = (i + 0.5)*Lnd/N;
+            sc += en[i]*std::cos(km*xi);
+            ss += en[i]*std::sin(km*xi);
+        }
+        ec[m] = ((m == 0) ? 1.0/N : 2.0/N)*sc;
+        es[m] = (m == 0) ? 0.0 : (2.0/N)*ss;
+    }
+
+    // Spectral cut-off, same rule as the modes path (kcut = C/max|eta|)
+    kcut_ = std::numeric_limits<scalar>::max();
+    if (cutoff_ == "auto")
+    {
+        if (etaMax <= 0)
+        {
+            FatalErrorInFunction << "cutoff auto: max|eta| is zero" << exit(FatalError);
+        }
+        kcut_ = cutoffC/etaMax;
+    }
+    else if (cutoff_ != "none")
+    {
+        FatalErrorInFunction
+            << "Air2Air cutoff '" << cutoff_ << "' not available for source theory;"
+            << " use auto or none" << exit(FatalError);
+    }
+
+    keep_.assign(M, 0);
+    keep_[0] = 1;
+    int nkeep = 0;
+    for (int m = 1; m < M; ++m)
+    {
+        const scalar km = 2.0*M_PI*m/Lnd;
+        if (km <= kcut_)
+        {
+            keep_[m] = 1;
+            ++nkeep;
+        }
+        else
+        {
+            ec[m] = 0.0;
+            es[m] = 0.0;
+        }
+    }
+
+    // eta_t at t = 0 from the rotation: d/dt (ec cos + es sin) = -omega es (cos)
+    // and +omega ec (sin), the same rule as dA/dt
+    std::vector<scalar> etc(M, 0.0), ets(M, 0.0);
+    for (int m = 1; m < M; ++m)
+    {
+        etc[m] = -omegaNd_[m]*es[m];
+        ets[m] = omegaNd_[m]*ec[m];
+    }
+
+    scalar w0 = 0.0;
+    airAnalytic::analyticAirCoeffsPeriodic
+    (
+        M, Lnd, ec, es, etc, ets, order_, A0_, B0_, w0
+    );
+
+    Info<< "Air2AirEnhanced source theory: order " << order_
+        << ", periodic basis, L = " << Lp << " m, M = " << M << nl
+        << "    max|eta| = " << etaMax*h_ << " m, cutoff " << cutoff_
+        << ", retained " << nkeep + 1 << " of " << M << " modes" << endl;
+
+    updated_ = false;
+}
+
+
 void Air2AirEnhanced::recordCoefficients
 (
     int it,
@@ -554,6 +717,16 @@ void Air2AirEnhanced::evaluate
             w -= k*A_[q]*cc*E;
             phi += A_[q]*cc*E;
             phit += At_[q]*cc*E;
+
+            if (theory_)
+            {
+                // sine modes (periodic basis): psi = B sin(kx x) exp(-k z)
+                const scalar ss = sx[m]*cy[n];
+                u += kx*B_[q]*cx[m]*cy[n]*E;
+                w -= k*B_[q]*ss*E;
+                phi += B_[q]*ss*E;
+                phit += Bt_[q]*ss*E;
+            }
         }
     }
 }
@@ -759,6 +932,17 @@ void Air2AirEnhanced::flowTables
         w -= km.k*A*cc*E;
         phi += A*cc*E;
         phit += At_[km.q]*cc*E;
+
+        if (theory_)
+        {
+            // sine modes (periodic basis), same as evaluate()
+            const scalar B = B_[km.q];
+            const scalar ss = sxm*cyn;
+            u += km.kx*B*cxm*cyn*E;
+            w -= km.k*B*ss*E;
+            phi += B*ss*E;
+            phit += Bt_[km.q]*ss*E;
+        }
     }
 
     const scalar Us = std::sqrt(g_*h_);

@@ -83,6 +83,13 @@ class Air2AirEnhanced
     mutable std::vector<scalar> EzT_;                          // [row][kept], < 0 if cut
     bool updated_;
 
+    // Theory source (source theory): periodic basis, sine coefficients B and
+    // the t = 0 coefficients from the wave theory, rotated in update(t)
+    bool theory_;
+    std::vector<scalar> B_, Bt_;              // sine coefficients at update(t)
+    std::vector<scalar> A0_, B0_;             // cosine/sine coefficients at t = 0
+    std::vector<scalar> omegaNd_;             // nondimensional phase frequency c k_m
+
     // Helpers
     void readRecord(long rec, int n, std::vector<scalar>& v) const;
     void readModes(int it, std::vector<scalar>& e, std::vector<scalar>& et, int Mx, int My) const;
@@ -101,6 +108,25 @@ public:
 
     //- Set the coefficients for CFD time t [s]
     void update(scalar t);
+
+    //- source theory: modes from one period of the wave theory at t = 0.
+    //  eta: N = 4 M samples over [0, Lp) [m] (eta(x_i, 0), x_i = (i+0.5) Lp/N),
+    //  c: phase speed [m/s]; h: length scale [m]; g: gravity [m/s2].
+    //  Applies the cut-off of the dictionary (auto or none) and the order.
+    void setTheory
+    (
+        scalar h,
+        scalar g,
+        scalar c,
+        scalar Lp,
+        const std::vector<scalar>& eta,
+        int M,
+        const std::string& cutoff,
+        scalar cutoffC
+    );
+
+    //- True when the modes come from a wave theory
+    bool theorySource() const { return theory_; }
 
     //- Velocity [m/s]; z measured from the mean water level [m]
     vector velocity(scalar x, scalar y, scalar z) const;

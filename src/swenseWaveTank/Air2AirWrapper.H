@@ -31,6 +31,22 @@ public:
 
     ~Air2AirWrapper();
 
+    //- source theory only: see Air2AirEnhanced::setTheory
+    void setTheory
+    (
+        scalar h,
+        scalar g,
+        scalar c,
+        scalar Lp,
+        const std::vector<scalar>& eta,
+        int M,
+        const std::string& cutoff,
+        scalar cutoffC
+    )
+    {
+        solver_().setTheory(h, g, c, Lp, eta, M, cutoff, cutoffC);
+    }
+
     //- Set the air coefficients for CFD time t [s]
     void update(scalar t);
 

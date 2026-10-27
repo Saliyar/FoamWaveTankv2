@@ -205,6 +205,97 @@ inline void analyticAirCoeffs
     }
 }
 
+// Periodic 1D variant (theory source). Basis on [0, L):
+//      eta   = sum_m ec_m cos(k_m x) + es_m sin(k_m x),  k_m = 2 pi m / L
+//      psi   = w0 z + sum_m (A_m cos(k_m x) + B_m sin(k_m x)) exp(-k_m z)
+// Same recipe as analyticAirCoeffs with My = 1 and Lx = L/2 (so k_m is the
+// same). The cosine-only part is unchanged; the sine terms enter as
+//      psi_x  = sum k (B cos - A sin)               (z = 0)
+//      psi_xz = - sum k^2 (B cos - A sin)           (z = 0)
+//      G      = eta psi_x [+ 1/2 eta^2 psi_xz]
+//      dG/dx  has cosine coefficients  k Gs_m  and sine coefficients -k Gc_m
+//      A = -(etc + k Gs)/k,  B = -(ets - k Gc)/k    (passes as in the cosine code)
+// Modes m = 0 gives zero A, B (w0 = etc_0). Midpoint grid, Nq = 4 M points.
+inline void analyticAirCoeffsPeriodic
+(
+    int M, double L,
+    const vec& ec, const vec& es, const vec& etc, const vec& ets,
+    int order, vec& Ac, vec& As, double& w0
+)
+{
+    if (order < 1 || order > 3)
+        throw std::invalid_argument("analyticAirCoeffsPeriodic: order must be 1, 2 or 3");
+
+    vec k(M, 0.0);
+    for (int m = 0; m < M; ++m) k[m] = 2.0*M_PI*m/L;
+
+    // Order 1: w0 = etc_0, A = -etc/k, B = -ets/k
+    w0 = etc[0];
+    Ac.assign(M, 0.0);
+    As.assign(M, 0.0);
+    for (int m = 1; m < M; ++m)
+    {
+        Ac[m] = -etc[m]/k[m];
+        As[m] = -ets[m]/k[m];
+    }
+    if (order == 1) return;
+
+    // Midpoint grid, Nq = 4 M points, cos and sin tables
+    const int N = 4*M;
+    vec C(N*M), S(N*M), eta(N, 0.0);
+    for (int i = 0; i < N; ++i)
+    {
+        const double x = (i + 0.5)*L/N;
+        for (int m = 0; m < M; ++m)
+        {
+            C[i*M + m] = std::cos(k[m]*x);
+            S[i*M + m] = std::sin(k[m]*x);
+            eta[i] += ec[m]*C[i*M + m] + es[m]*S[i*M + m];
+        }
+    }
+
+    const int npass = (order == 2) ? 1 : 2;
+    const bool quad = (order == 3);
+    vec G(N), gc(M), gs(M);
+
+    for (int pass = 0; pass < npass; ++pass)
+    {
+        for (int i = 0; i < N; ++i)
+        {
+            double psx = 0.0, psxz = 0.0;
+            for (int m = 0; m < M; ++m)
+            {
+                const double b = As[m]*C[i*M + m] - Ac[m]*S[i*M + m];
+                psx += k[m]*b;
+                psxz -= k[m]*k[m]*b;
+            }
+            const double h2 = quad ? 0.5*eta[i]*eta[i] : 0.0;
+            G[i] = eta[i]*psx + h2*psxz;
+        }
+
+        // Projection: cos coefficient weights 1/N (m = 0) and 2/N, sine 2/N
+        for (int m = 0; m < M; ++m)
+        {
+            double sc = 0.0, ss = 0.0;
+            for (int i = 0; i < N; ++i)
+            {
+                sc += G[i]*C[i*M + m];
+                ss += G[i]*S[i*M + m];
+            }
+            const double wc = (m == 0) ? 1.0/N : 2.0/N;
+            gc[m] = wc*sc;
+            gs[m] = (2.0/N)*ss;
+        }
+
+        // A = -(etc + k Gs)/k ; B = -(ets - k Gc)/k
+        for (int m = 1; m < M; ++m)
+        {
+            Ac[m] = -(etc[m] + k[m]*gs[m])/k[m];
+            As[m] = -(ets[m] - k[m]*gc[m])/k[m];
+        }
+    }
+}
+
 } // namespace airAnalytic
 
 #endif

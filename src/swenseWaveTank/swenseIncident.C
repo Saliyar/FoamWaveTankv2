@@ -5,6 +5,7 @@
 #include "IOdictionary.H"
 #include "gravityMeshObject.H"
 #include "Grid2Grid.H"
+#include "waveTheoryForcing.H"
 
 #include <cmath>
 #include <map>
@@ -188,13 +189,69 @@ Foam::swenseIncident::swenseIncident
             << exit(FatalError);
     }
 
+    // The Grid2Grid pExcess is used with g z measured from the origin
+    if (mag(seaLevel_) > SMALL)
+    {
+        FatalErrorInFunction
+            << "swenseWaveFoam requires seaLevel 0 in waveProperties (found "
+            << seaLevel_ << " m)" << exit(FatalError);
+    }
+
     // Air2Air block (optional), in the farfield coefficients
     if (wp.subDict("farfieldCoeffs").found("Air2Air"))
     {
         const dictionary& a2a = wp.subDict("farfieldCoeffs").subDict("Air2Air");
-        fileName modesFile;
-        a2a.lookup("modesFile") >> modesFile;
-        air_.reset(new Air2AirWrapper(modesFile, a2a));
+        const word source = a2a.lookupOrDefault<word>("source", word("modesFile"));
+
+        if (source == "theory")
+        {
+            // Periodic modes from the wave theory (one period, t = 0)
+            const waveTheories::waveTheoryForcing* wtf =
+                dynamic_cast<const waveTheories::waveTheoryForcing*>(&ext_);
+
+            if (!wtf)
+            {
+                FatalErrorInFunction
+                    << "Air2Air source theory needs externalWaveForcing"
+                    << " waveTheoryForcing" << exit(FatalError);
+            }
+
+            const scalar c = wtf->phaseSpeed();
+            const scalar K = wtf->waveNumber();
+
+            if (c <= 0 || K <= 0)
+            {
+                FatalErrorInFunction
+                    << "Air2Air source theory: the wave theory gives no"
+                    << " phase speed or wave number" << exit(FatalError);
+            }
+
+            // Period length L = N_L wavelength, N_L = 1
+            const scalar Lp = 2*M_PI/K;
+            const label M = a2a.lookupOrDefault<label>("nModes", 64);
+            const label N = 4*M;
+
+            std::vector<scalar> eta(N);
+            for (label i = 0; i < N; ++i)
+            {
+                eta[i] = wtf->eta(point((i + 0.5)*Lp/N, 0, 0), 0.0);
+            }
+
+            // Length scale h = 1/K: the fundamental has k h = 1
+            air_.reset(new Air2AirWrapper("", a2a));
+            air_->setTheory
+            (
+                1.0/K, magG_, c, Lp, eta, M,
+                a2a.lookupOrDefault<word>("cutoff", word("auto")),
+                a2a.lookupOrDefault<scalar>("cutoffC", 0.5)
+            );
+        }
+        else
+        {
+            fileName modesFile;
+            a2a.lookup("modesFile") >> modesFile;
+            air_.reset(new Air2AirWrapper(modesFile, a2a));
+        }
 
         // The Air2Air pressure is -rho_air (psi_t + ...): its density must be
         // the air density of the two-phase model

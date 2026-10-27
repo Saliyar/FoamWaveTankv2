@@ -137,6 +137,17 @@ public:
 
         void printCoeffs();
 
+        //- c = omega/K (same as used in pExcess)
+        virtual scalar phaseSpeed() const
+        {
+            return omega_/K_;
+        };
+
+        virtual scalar waveNumber() const
+        {
+            return K_;
+        };
+
         virtual scalar eta
         (
             const point&,

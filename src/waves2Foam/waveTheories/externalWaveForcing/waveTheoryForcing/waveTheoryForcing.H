@@ -143,6 +143,17 @@ public:
         {
             return true;
         };
+
+        //- Phase speed c [m/s] and wave number k [1/m] of the theory
+        scalar phaseSpeed() const
+        {
+            return theory_->phaseSpeed();
+        };
+
+        scalar waveNumber() const
+        {
+            return theory_->waveNumber();
+        };
 };
 
 
