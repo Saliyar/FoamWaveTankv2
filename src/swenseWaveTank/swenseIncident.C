@@ -73,6 +73,25 @@ Foam::scalar Foam::swenseIncident::blendThickness(const objectRegistry& db)
 }
 
 
+// Grid2GridCoeffs of waveProperties for a Grid2Grid forcing. Any other forcing
+// (for example waveTheoryForcing) is already in CFD coordinates, so an empty
+// dictionary gives the identity wave frame and zero time offset.
+static Foam::dictionary grid2GridCoeffsFor
+(
+    const Foam::objectRegistry& db,
+    const Foam::waveTheories::externalWaveForcing& ext
+)
+{
+    if (dynamic_cast<const Foam::waveTheories::Grid2Grid*>(&ext))
+    {
+        return db.lookupObject<IOdictionary>("waveProperties")
+            .subDict("Grid2GridCoeffs");
+    }
+
+    return Foam::dictionary();
+}
+
+
 // * * * * * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * //
 
 Foam::swenseIncident::swenseIncident
@@ -88,20 +107,17 @@ Foam::swenseIncident::swenseIncident
     air_(),
     refPos_
     (
-        mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
-            .subDict("Grid2GridCoeffs")
+        grid2GridCoeffsFor(mesh.thisDb(), ext)
             .lookupOrDefault<vector>("referencePosition", vector::zero)
     ),
     theta_
     (
-        mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
-            .subDict("Grid2GridCoeffs")
+        grid2GridCoeffsFor(mesh.thisDb(), ext)
             .lookupOrDefault<scalar>("referenceTheta", 0.0)*M_PI/180.0
     ),
     refTime_
     (
-        mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
-            .subDict("Grid2GridCoeffs")
+        grid2GridCoeffsFor(mesh.thisDb(), ext)
             .lookupOrDefault<scalar>("referenceTime", 0.0)
     ),
     seaLevel_
@@ -164,7 +180,8 @@ Foam::swenseIncident::swenseIncident
         << dzInterface << " m, guard d_g = " << guard_ << " m" << endl;
 
     // The SWENSE path needs the dynamic pressure without the soft start
-    if (wp.subDict("Grid2GridCoeffs").lookupOrDefault<scalar>("Tsoft", 0.0) > SMALL)
+    // (the analytic theory checks its own Tsoft in waveTheoryForcing)
+    if (grid2GridCoeffsFor(mesh.thisDb(), ext_).lookupOrDefault<scalar>("Tsoft", 0.0) > SMALL)
     {
         FatalErrorInFunction
             << "swenseWaveFoam requires Grid2GridCoeffs Tsoft = 0"
