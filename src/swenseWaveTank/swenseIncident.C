@@ -145,14 +145,14 @@ Foam::swenseIncident::swenseIncident
     UInc_
     (
         IOobject("UInc", mesh.time().timeName(), mesh,
-            IOobject::NO_READ, IOobject::NO_WRITE),
+            IOobject::NO_READ, IOobject::AUTO_WRITE),
         mesh,
         dimensionedVector("UInc", dimVelocity, vector::zero)
     ),
     pInc_
     (
         IOobject("pInc", mesh.time().timeName(), mesh,
-            IOobject::NO_READ, IOobject::NO_WRITE),
+            IOobject::NO_READ, IOobject::AUTO_WRITE),
         mesh,
         dimensionedScalar("pInc", dimPressure, 0.0)
     ),
