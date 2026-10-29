@@ -24,3 +24,10 @@ Checks before any run:
 - Band residual: compare integrated F_I with current formulation (should match in the limit).
 
 Open: whether this changes the box Fx gap at delta = 0.024 m. Needs one run, on your go.
+
+## Update (implemented, switch off by default)
+- waveProperties `momentumBlend` (default false): W = a rhoW/rhoI in weights(); with true the pressure is the linear absolute blend pI = a pW + (1-a) pA (blendUP), replacing the one-sided scratch pressure.
+- Default false = previous scheme (W = alphaI). Commit a0b1ba0 had changed the default; this commit restores it behind the switch.
+- Needs case keys (not in code): Air2Air `pressureModel bernoulli` for the full pA.
+- Not changed: phiSource0 psi form (finding 1 and 3 of the theory review).
+- Not compiled, not run.

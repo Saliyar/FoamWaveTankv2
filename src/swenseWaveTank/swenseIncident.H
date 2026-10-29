@@ -87,6 +87,10 @@ class swenseIncident
         //- Blending thickness delta (m)
         const scalar delta_;
 
+        //- Momentum-weighted blend and linear absolute pressure blend
+        //  (waveProperties momentumBlend, default false: current scheme)
+        const bool momentumBlend_;
+
         //- Guard distance d_g = max(delta, 3 dz), dz = cell height at the
         //  interface (document Rev4, 16.3 rule 5)
         scalar guard_;

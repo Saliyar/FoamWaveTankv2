@@ -134,6 +134,11 @@ Foam::swenseIncident::swenseIncident
     ),
     rhoWater_(rhoWater.value()),
     delta_(blendThickness(mesh.thisDb())),
+    momentumBlend_
+    (
+        mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
+            .lookupOrDefault<bool>("momentumBlend", false)
+    ),
     guard_(0.0),
     rhoAir_(rhoAir.value()),
     magG_
@@ -485,11 +490,11 @@ void Foam::swenseIncident::weights
     const scalar eps = 1e-6;
     const scalar a = min(max((alphaI - eps)/(1.0 - 2.0*eps), scalar(0)), scalar(1));
 
-    // Momentum blend (branch swense-momentum-blend): the water weight is the
-    // share of the incident momentum density, W = a rhoW/rhoI, rhoI blended
-    // with the same a. Reduces to a at rhoW = rhoA and at a = 0 or 1.
+    // Momentum blend (waveProperties momentumBlend true): the water weight is
+    // the share of the incident momentum density, W = a rhoW/rhoI, with rhoI
+    // blended by the same a. Otherwise the water weight is a itself.
     const scalar rhoI = a*rhoWater_ + (1.0 - a)*rhoAir_;
-    const scalar W = a*rhoWater_/rhoI;
+    const scalar W = momentumBlend_ ? a*rhoWater_/rhoI : a;
 
     const scalar zRel = x.z() - eta;
 
@@ -560,6 +565,53 @@ void Foam::swenseIncident::blendUP
         const vector Ua = airUP(ip, pa);
         havePa = true;
         u += wAir*Ua;
+    }
+
+    // Momentum blend (waveProperties momentumBlend true): absolute pressures
+    // blended linearly with alphaI, pI = alphaI pW + (1 - alphaI) pA, the form
+    // used in the incident residual derivation. Only the sides that are
+    // evaluated (weights above) enter; a side with zero weight is not used.
+    if (momentumBlend_)
+    {
+        const scalar a =
+            min(max((alphaI - 1e-6)/(1.0 - 2e-6), scalar(0)), scalar(1));
+
+        const bool useW = wWater > 0;
+        const bool useA = wAir > 0;
+
+        scalar pWabs = 0.0, pAabs = 0.0;
+
+        if (useW)
+        {
+            pWabs =
+                fastEval_
+              ? rhoWater_*(pExPt_[ip] - magG_*(x - refPos_).z())
+              : waterP(x, t);
+        }
+
+        if (useA)
+        {
+            if (!havePa)
+            {
+                airUP(ip, pa);
+            }
+            pAabs = pa;
+        }
+
+        if (useW && useA)
+        {
+            p = a*pWabs + (1.0 - a)*pAabs;
+        }
+        else if (useW)
+        {
+            p = pWabs;
+        }
+        else
+        {
+            p = pAabs;
+        }
+
+        return;
     }
 
     // Pressure (scratch fix): one side only, relative to its value at the
