@@ -483,7 +483,13 @@ void Foam::swenseIncident::weights
 ) const
 {
     const scalar eps = 1e-6;
-    const scalar W = min(max((alphaI - eps)/(1.0 - 2.0*eps), scalar(0)), scalar(1));
+    const scalar a = min(max((alphaI - eps)/(1.0 - 2.0*eps), scalar(0)), scalar(1));
+
+    // Momentum blend (branch swense-momentum-blend): the water weight is the
+    // share of the incident momentum density, W = a rhoW/rhoI, rhoI blended
+    // with the same a. Reduces to a at rhoW = rhoA and at a = 0 or 1.
+    const scalar rhoI = a*rhoWater_ + (1.0 - a)*rhoAir_;
+    const scalar W = a*rhoWater_/rhoI;
 
     const scalar zRel = x.z() - eta;
 
