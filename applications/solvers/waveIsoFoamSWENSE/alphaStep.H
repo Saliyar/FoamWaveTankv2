@@ -22,8 +22,17 @@ U == incident.UInc() + Uc;
 
     alpha1 = alpha1.oldTime();
 
+    // isoAdvection::advect() reads alpha1.oldTime() unscaled on a moving mesh
+    // (its V0/V scaling only reaches alpha1In_, which is then overwritten), so
+    // the old value is scaled to the current cell volume here and restored
+    // after the step, as FloatStepper alphaEqn.H does (upstream b118249).
+    scalarField alpha1OldValues;
+
     if (mesh.moving())
     {
+        alpha1OldValues = alpha1.oldTime().primitiveField();
+        alpha1.oldTime().primitiveFieldRef() *= (mesh.Vsc0()/mesh.Vsc());
+
         U -= fvc::reconstruct(meshPhi);
     }
 
@@ -31,6 +40,8 @@ U == incident.UInc() + Uc;
 
     if (mesh.moving())
     {
+        alpha1.oldTime().primitiveFieldRef() = alpha1OldValues;
+
         U += fvc::reconstruct(meshPhi);
     }
 
@@ -48,8 +59,14 @@ U == incident.UInc() + Uc;
 
     alphaI = alphaI.oldTime();
 
+    // Same V0/V scaling of the old value as for alpha1 above
+    scalarField alphaIOldValues;
+
     if (mesh.moving())
     {
+        alphaIOldValues = alphaI.oldTime().primitiveField();
+        alphaI.oldTime().primitiveFieldRef() *= (mesh.Vsc0()/mesh.Vsc());
+
         incident.UIncRW() -= fvc::reconstruct(meshPhi);
     }
 
@@ -57,6 +74,8 @@ U == incident.UInc() + Uc;
 
     if (mesh.moving())
     {
+        alphaI.oldTime().primitiveFieldRef() = alphaIOldValues;
+
         incident.UIncRW() += fvc::reconstruct(meshPhi);
     }
 
