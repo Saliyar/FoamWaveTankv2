@@ -51,13 +51,49 @@
 
     if (pimple.momentumPredictor())
     {
-        solve
-        (
-            UcEqn
-         ==
-            fvc::reconstruct
+        if (incident.momentumBlend())
+        {
+            // Momentum-blend residual on the right-hand side, theory Appendix C
+            // eq. C.8, multiplied by rhoI:
+            //   rhoI FmI = (pW - pA) grad(alphaI)
+            //            - alphaI (1 - alphaI) rhoW rhoA / rhoI dU.grad(dU)
+            // face part: (pW - pA)_f snGrad(alphaI) |Sf|; cell part: second term
+            const surfaceScalarField phiSourceM
             (
-                phiSource0 - fvc::snGrad(pc)*mesh.magSf()
-            )
-        );
+                "phiSourceM",
+                incident.dPf()*fvc::snGrad(alphaI)*mesh.magSf()
+            );
+
+            const volVectorField& dUc = incident.dUc();
+
+            const volVectorField SourceM
+            (
+                "SourceM",
+                -(alphaI*(1.0 - alphaI)*rho1.value()*rho2.value()/rhoI)
+                *(dUc & fvc::grad(dUc))
+            );
+
+            solve
+            (
+                UcEqn
+             ==
+                fvc::reconstruct
+                (
+                    phiSource0 + phiSourceM - fvc::snGrad(pc)*mesh.magSf()
+                )
+              + SourceM
+            );
+        }
+        else
+        {
+            solve
+            (
+                UcEqn
+             ==
+                fvc::reconstruct
+                (
+                    phiSource0 - fvc::snGrad(pc)*mesh.magSf()
+                )
+            );
+        }
     }
