@@ -181,6 +181,20 @@ Foam::swenseIncident::swenseIncident
             IOobject::NO_READ, IOobject::NO_WRITE),
         mesh,
         dimensionedScalar("psiWf", dimVelocity*dimVelocity, 0.0)
+    ),
+    dUc_
+    (
+        IOobject("dUc", mesh.time().timeName(), mesh,
+            IOobject::NO_READ, IOobject::NO_WRITE),
+        mesh,
+        dimensionedVector("dUc", dimVelocity, vector::zero)
+    ),
+    dPf_
+    (
+        IOobject("dPf", mesh.time().timeName(), mesh,
+            IOobject::NO_READ, IOobject::NO_WRITE),
+        mesh,
+        dimensionedScalar("dPf", dimPressure, 0.0)
     )
 {
     const dictionary& wp =
@@ -732,6 +746,24 @@ void Foam::swenseIncident::movePoints()
 }
 
 
+void Foam::swenseIncident::dUdP
+(
+    const label ip,
+    const scalar t,
+    vector& dU,
+    scalar& dP
+) const
+{
+    const point& x = pts_[ip];
+
+    scalar pa = 0.0;
+    const vector Ua = airUP(ip, pa);
+
+    dU = waterU(x, t) - Ua;
+    dP = waterP(x, t) - pa;
+}
+
+
 void Foam::swenseIncident::update
 (
     const scalar t,
@@ -888,6 +920,50 @@ void Foam::swenseIncident::update
             );
             psiWf_.boundaryFieldRef()[patchi][facei] = psiWValue(ip, t);
             ++ip;
+        }
+    }
+
+    // Momentum blend: dU = uW - uA at the cell centres and dP = pW - pA at
+    // the faces, at the same points as blendUP (not filled when the switch is off)
+    if (momentumBlend_)
+    {
+        vector dU;
+        scalar dP;
+
+        forAll(dUc_, celli)
+        {
+            dUdP(celli, t, dU, dP);
+            dUc_[celli] = dU;
+        }
+
+        label ipc = offCb_;
+
+        forAll(dUc_.boundaryField(), patchi)
+        {
+            forAll(dUc_.boundaryField()[patchi], facei)
+            {
+                dUdP(ipc, t, dU, dP);
+                dUc_.boundaryFieldRef()[patchi][facei] = dU;
+                ++ipc;
+            }
+        }
+
+        forAll(dPf_.primitiveField(), facei)
+        {
+            dUdP(offCf_ + facei, t, dU, dP);
+            dPf_.primitiveFieldRef()[facei] = dP;
+        }
+
+        label ipf = offCfb_;
+
+        forAll(dPf_.boundaryField(), patchi)
+        {
+            forAll(dPf_.boundaryField()[patchi], facei)
+            {
+                dUdP(ipf, t, dU, dP);
+                dPf_.boundaryFieldRef()[patchi][facei] = dP;
+                ++ipf;
+            }
         }
     }
 

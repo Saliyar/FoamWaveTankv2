@@ -31,6 +31,27 @@ if (runTime.controlDict().lookupOrDefault<bool>("projectPhiI", true))
             psiTypes[pI] = fixedValueFvPatchScalarField::typeName;
         }
     }
+    // Target of div(phiInc). Momentum blend (waveProperties momentumBlend true):
+    // div(rhoI uI) = rhoI qI, i.e. div(uI) = qI - uI.grad(rhoI)/rhoI with
+    // qI = rhoW rhoA/rhoI^2 dU.grad(alphaI). Otherwise zero, as before.
+    volScalarField divTargetI
+    (
+        IOobject("divTargetI", runTime.timeName(), mesh,
+            IOobject::NO_READ, IOobject::NO_WRITE),
+        mesh,
+        dimensionedScalar("divTargetI", dimless/dimTime, 0.0)
+    );
+
+    if (incident.momentumBlend())
+    {
+        const volScalarField qI
+        (
+            "qI",
+            rho1.value()*rho2.value()/sqr(rhoI)*(incident.dUc() & fvc::grad(alphaI))
+        );
+        divTargetI = qI - (incident.UInc() & fvc::grad(rhoI))/rhoI;
+    }
+
     volScalarField psiP
     (
         IOobject("psiProj", runTime.timeName(), mesh,
@@ -43,7 +64,7 @@ if (runTime.controlDict().lookupOrDefault<bool>("projectPhiI", true))
     // iteration would select psiProjFinal: the projection is not a final solve
     solve
     (
-        fvm::laplacian(psiP) == fvc::div(phiInc),
+        fvm::laplacian(psiP) == fvc::div(phiInc) - divTargetI,
         mesh.solverDict("psiProj")
     );
     phiInc -= fvc::snGrad(psiP)*mesh.magSf();
