@@ -760,7 +760,14 @@ void Foam::swenseIncident::dUdP
     const vector Ua = airUP(ip, pa);
 
     dU = waterU(x, t) - Ua;
-    dP = waterP(x, t) - pa;
+
+    // Same pW as blendUP(): the fastEval_ path when it is set
+    const scalar pW =
+        fastEval_
+      ? rhoWater_*(pExPt_[ip] - magG_*(x - refPos_).z())
+      : waterP(x, t);
+
+    dP = pW - pa;
 }
 
 
