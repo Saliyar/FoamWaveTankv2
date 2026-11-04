@@ -27,6 +27,30 @@
     // momentum predictor, times rA on the faces
     surfaceScalarField phiSource(phiSource0*rAUf);
 
+    // Momentum blend (switch momentumBlend): the same residual rhoI FmI as in
+    // the predictor (swenseUcEqn.H), as face fluxes times rAU. The cell term
+    // enters as its face flux (interpolate(SourceM) & Sf). The projection target
+    // qI is already in phiInc, which enters through div(phiInc) below.
+    if (incident.momentumBlend())
+    {
+        const surfaceScalarField phiSourceM
+        (
+            "phiSourceM",
+            incident.dPf()*fvc::snGrad(alphaI)*mesh.magSf()
+        );
+
+        const volVectorField& dUc = incident.dUc();
+
+        const volVectorField SourceM
+        (
+            "SourceM",
+            -(alphaI*(1.0 - alphaI)*rho1.value()*rho2.value()/rhoI)
+            *(dUc & fvc::grad(dUc))
+        );
+
+        phiSource += (phiSourceM + (fvc::interpolate(SourceM) & mesh.Sf()))*rAUf;
+    }
+
     phiHbyA += phiSource;
 
     constrainPressure(pc, Uc, phiHbyA, rAUf);
