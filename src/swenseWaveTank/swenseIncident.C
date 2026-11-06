@@ -141,6 +141,11 @@ Foam::swenseIncident::swenseIncident
         mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
             .lookupOrDefault<bool>("momentumBlend", false)
     ),
+    momentumBlendPressure_
+    (
+        mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
+            .lookupOrDefault<bool>("momentumBlendPressure", false)
+    ),
     guard_(0.0),
     rhoAir_(rhoAir.value()),
     magG_
@@ -617,7 +622,7 @@ void Foam::swenseIncident::blendUP
     // blended linearly with alphaI, pI = alphaI pW + (1 - alphaI) pA, the form
     // used in the incident residual derivation. Only the sides that are
     // evaluated (weights above) enter; a side with zero weight is not used.
-    if (momentumBlend_)
+    if (momentumBlend_ && momentumBlendPressure_)
     {
         const scalar a =
             min(max((alphaI - 1e-6)/(1.0 - 2e-6), scalar(0)), scalar(1));

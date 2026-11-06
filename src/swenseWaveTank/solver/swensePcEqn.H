@@ -44,7 +44,7 @@
         const volVectorField SourceM
         (
             "SourceM",
-            -(alphaI*(1.0 - alphaI)*rho1.value()*rho2.value()/rhoI)
+            -(alphaI*(1.0 - alphaI)*rho1*rho2/rhoI)
             *(dUc & fvc::grad(dUc))
         );
 

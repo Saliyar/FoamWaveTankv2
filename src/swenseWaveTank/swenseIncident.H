@@ -100,6 +100,11 @@ class swenseIncident
         //  (waveProperties momentumBlend, default false: current scheme)
         const bool momentumBlend_;
 
+        //- Linear absolute pressure blend in blendUP (waveProperties
+        //  momentumBlendPressure, default false: one-sided pressure
+        //  relative to eta). Used only when momentumBlend_ is true.
+        const bool momentumBlendPressure_;
+
         //- Guard distance d_g = max(delta, 3 dz), dz = cell height at the
         //  interface (document Rev4, 16.3 rule 5)
         scalar guard_;

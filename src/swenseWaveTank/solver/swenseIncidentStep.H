@@ -47,7 +47,7 @@ if (runTime.controlDict().lookupOrDefault<bool>("projectPhiI", true))
         const volScalarField qI
         (
             "qI",
-            rho1.value()*rho2.value()/sqr(rhoI)*(incident.dUc() & fvc::grad(alphaI))
+            rho1*rho2/sqr(rhoI)*(incident.dUc() & fvc::grad(alphaI))
         );
         divTargetI = qI - (incident.UInc() & fvc::grad(rhoI))/rhoI;
     }
