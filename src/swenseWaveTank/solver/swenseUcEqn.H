@@ -39,61 +39,59 @@
 
     UcEqn.relax();
 
-    // Interface force per unit area divided by rA, without the (rA)_f factor
-    // that the pressure corrector applies. Interface force (rho - rhoI) grad(psi),
-    // psi = (pW - pW at eta)/rho_w, in the interFoam balanced form (see theory doc Sec 16):
-    //     phiSource0 = -psi_f snGrad(rho - rhoI) |Sf|
-    const surfaceScalarField phiSource0
+    // Blend residual on the right-hand side of the Uc equation, theory eq. (compcons):
+    //   right side = -grad(pC_hat) - pI grad(rho/rhoI) - rho F   (sigma = 0, advective form)
+    // with F = F_I (eq. incmom) on the momentum blend and F = F^v (eq. Fv) on the
+    // default velocity blend. In both cases:
+    //   face part  : -(rho/rhoI)_f dP_f snGrad(alphaI) |Sf|,  dP = pW - pA (absolute)
+    //   cell part  : momentum : +rho alphaI(1-alphaI) rho1 rho2/rhoI^2 dU.grad(dU)
+    //                velocity : +rho alphaI(1-alphaI) [ (rho1-rho2)/rhoI (aW-aA) + dU.grad(dU) ]
+    // aW - aA = -grad(pW)/rho1 + grad(pA)/rho2. The psi-form phiSource0 is kept (note Sec. 11).
+    const volScalarField& pWc = incident.pWc();
+    const volScalarField& pAc = incident.pAc();
+    const volVectorField& dUc = incident.dUc();
+
+    surfaceScalarField dPface("dPface", fvc::interpolate(pWc - pAc));
+    if (incident.momentumBlend())
+    {
+        dPface = incident.dPf();
+    }
+
+    const surfaceScalarField blendPhi
     (
-        "phiSource0",
-        -incident.psiWf()*fvc::snGrad(rho - rhoI)*mesh.magSf()
+        "blendPhi",
+        -fvc::interpolate(rho/rhoI)*dPface*fvc::snGrad(alphaI)*mesh.magSf()
     );
+
+    const volVectorField dUgraddU("dUgraddU", dUc & fvc::grad(dUc));
+
+    volVectorField blendCell("blendCell", rho*alphaI*(1.0 - alphaI)*dUgraddU);
+    if (incident.momentumBlend())
+    {
+        blendCell =
+            rho*alphaI*(1.0 - alphaI)*rho1*rho2/sqr(rhoI)*dUgraddU;
+    }
+    else
+    {
+        const volVectorField aDiff
+        (
+            "aDiff",
+            -fvc::grad(pWc)/rho1 + fvc::grad(pAc)/rho2
+        );
+        blendCell +=
+            rho*alphaI*(1.0 - alphaI)*((rho1 - rho2)/rhoI)*aDiff;
+    }
 
     if (pimple.momentumPredictor())
     {
-        if (incident.momentumBlend())
-        {
-            // Momentum-blend residual on the right-hand side, theory Appendix C
-            // eq. C.8, multiplied by rhoI:
-            //   rhoI FmI = (pW - pA) grad(alphaI)
-            //            - alphaI (1 - alphaI) rhoW rhoA / rhoI dU.grad(dU)
-            // face part: (pW - pA)_f snGrad(alphaI) |Sf|; cell part: second term
-            const surfaceScalarField phiSourceM
+        solve
+        (
+            UcEqn
+         ==
+            fvc::reconstruct
             (
-                "phiSourceM",
-                incident.dPf()*fvc::snGrad(alphaI)*mesh.magSf()
-            );
-
-            const volVectorField& dUc = incident.dUc();
-
-            const volVectorField SourceM
-            (
-                "SourceM",
-                -(alphaI*(1.0 - alphaI)*rho1*rho2/rhoI)
-                *(dUc & fvc::grad(dUc))
-            );
-
-            solve
-            (
-                UcEqn
-             ==
-                fvc::reconstruct
-                (
-                    phiSource0 + phiSourceM - fvc::snGrad(pc)*mesh.magSf()
-                )
-              + SourceM
-            );
-        }
-        else
-        {
-            solve
-            (
-                UcEqn
-             ==
-                fvc::reconstruct
-                (
-                    phiSource0 - fvc::snGrad(pc)*mesh.magSf()
-                )
-            );
-        }
+                phiSource0 + blendPhi - fvc::snGrad(pc)*mesh.magSf()
+            )
+          + blendCell
+        );
     }

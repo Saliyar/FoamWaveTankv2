@@ -200,6 +200,20 @@ Foam::swenseIncident::swenseIncident
             IOobject::NO_READ, IOobject::NO_WRITE),
         mesh,
         dimensionedScalar("dPf", dimPressure, 0.0)
+    ),
+    pWc_
+    (
+        IOobject("pWc", mesh.time().timeName(), mesh,
+            IOobject::NO_READ, IOobject::NO_WRITE),
+        mesh,
+        dimensionedScalar("pWc", dimPressure, 0.0)
+    ),
+    pAc_
+    (
+        IOobject("pAc", mesh.time().timeName(), mesh,
+            IOobject::NO_READ, IOobject::NO_WRITE),
+        mesh,
+        dimensionedScalar("pAc", dimPressure, 0.0)
     )
 {
     const dictionary& wp =
@@ -751,6 +765,30 @@ void Foam::swenseIncident::movePoints()
 }
 
 
+void Foam::swenseIncident::fieldsAt
+(
+    const label ip,
+    const scalar t,
+    vector& dU,
+    scalar& pW,
+    scalar& pa
+) const
+{
+    const point& x = pts_[ip];
+
+    const vector Ua = airUP(ip, pa);
+
+    const vector Uw = fastEval_ ? UPt_[ip] : waterU(x, t);
+    dU = Uw - Ua;
+
+    // Same pW as blendUP(): the fastEval_ path when it is set
+    pW =
+        fastEval_
+      ? rhoWater_*(pExPt_[ip] - magG_*(x - refPos_).z())
+      : waterP(x, t);
+}
+
+
 void Foam::swenseIncident::dUdP
 (
     const label ip,
@@ -759,20 +797,9 @@ void Foam::swenseIncident::dUdP
     scalar& dP
 ) const
 {
-    const point& x = pts_[ip];
-
+    scalar pW = 0.0;
     scalar pa = 0.0;
-    const vector Ua = airUP(ip, pa);
-
-    const vector Uw = fastEval_ ? UPt_[ip] : waterU(x, t);
-    dU = Uw - Ua;
-
-    // Same pW as blendUP(): the fastEval_ path when it is set
-    const scalar pW =
-        fastEval_
-      ? rhoWater_*(pExPt_[ip] - magG_*(x - refPos_).z())
-      : waterP(x, t);
-
+    fieldsAt(ip, t, dU, pW, pa);
     dP = pW - pa;
 }
 
@@ -938,15 +965,17 @@ void Foam::swenseIncident::update
 
     // Momentum blend: dU = uW - uA at the cell centres and dP = pW - pA at
     // the faces, at the same points as blendUP (not filled when the switch is off)
-    if (momentumBlend_)
+    // Cell-centre dU, pW and pa, always (the velocity-blend F^v needs them too)
     {
         vector dU;
-        scalar dP;
+        scalar pW, pa;
 
         forAll(dUc_, celli)
         {
-            dUdP(celli, t, dU, dP);
+            fieldsAt(celli, t, dU, pW, pa);
             dUc_[celli] = dU;
+            pWc_[celli] = pW;
+            pAc_[celli] = pa;
         }
 
         label ipc = offCb_;
@@ -955,11 +984,20 @@ void Foam::swenseIncident::update
         {
             forAll(dUc_.boundaryField()[patchi], facei)
             {
-                dUdP(ipc, t, dU, dP);
+                fieldsAt(ipc, t, dU, pW, pa);
                 dUc_.boundaryFieldRef()[patchi][facei] = dU;
+                pWc_.boundaryFieldRef()[patchi][facei] = pW;
+                pAc_.boundaryFieldRef()[patchi][facei] = pa;
                 ++ipc;
             }
         }
+    }
+
+    // Momentum blend: dP = pW - pA at the faces (same points as blendUP)
+    if (momentumBlend_)
+    {
+        vector dU;
+        scalar dP;
 
         forAll(dPf_.primitiveField(), facei)
         {

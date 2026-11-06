@@ -31,9 +31,8 @@ if (runTime.controlDict().lookupOrDefault<bool>("projectPhiI", true))
             psiTypes[pI] = fixedValueFvPatchScalarField::typeName;
         }
     }
-    // Target of div(phiInc). Momentum blend (waveProperties momentumBlend true):
-    // div(rhoI uI) = rhoI qI, i.e. div(uI) = qI - uI.grad(rhoI)/rhoI with
-    // qI = rhoW rhoA/rhoI^2 dU.grad(alphaI). Otherwise zero, as before.
+    // Target of div(phiInc) (theory Sec. 10): kinematic identity div(uI) = q,
+    // q = qI (momentum blend) or qv (velocity blend).
     volScalarField divTargetI
     (
         IOobject("divTargetI", runTime.timeName(), mesh,
@@ -44,12 +43,13 @@ if (runTime.controlDict().lookupOrDefault<bool>("projectPhiI", true))
 
     if (incident.momentumBlend())
     {
-        const volScalarField qI
-        (
-            "qI",
-            rho1*rho2/sqr(rhoI)*(incident.dUc() & fvc::grad(alphaI))
-        );
-        divTargetI = qI - (incident.UInc() & fvc::grad(rhoI))/rhoI;
+        // Kinematic target qI (eq. kin): div(uI) = qI, no steady mass term
+        divTargetI = rho1*rho2/sqr(rhoI)*(incident.dUc() & fvc::grad(alphaI));
+    }
+    else
+    {
+        // Velocity blend: div(uI) = qv = dU.grad(alphaI) (eq. qv)
+        divTargetI = incident.dUc() & fvc::grad(alphaI);
     }
 
     volScalarField psiP

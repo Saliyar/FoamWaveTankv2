@@ -23,33 +23,10 @@
         adjustPhi(phiHbyA, Uc, pc);
     }
 
-    // Interface force as a face flux (eq. 16.6), the same source as in the
-    // momentum predictor, times rA on the faces
+    // Blend residual as face fluxes times rAU: the same blendPhi and blendCell as
+    // the Uc predictor (swenseUcEqn.H), the cell part through its face interpolate
     surfaceScalarField phiSource(phiSource0*rAUf);
-
-    // Momentum blend (switch momentumBlend): the same residual rhoI FmI as in
-    // the predictor (swenseUcEqn.H), as face fluxes times rAU. The cell term
-    // enters as its face flux (interpolate(SourceM) & Sf). The projection target
-    // qI is already in phiInc, which enters through div(phiInc) below.
-    if (incident.momentumBlend())
-    {
-        const surfaceScalarField phiSourceM
-        (
-            "phiSourceM",
-            incident.dPf()*fvc::snGrad(alphaI)*mesh.magSf()
-        );
-
-        const volVectorField& dUc = incident.dUc();
-
-        const volVectorField SourceM
-        (
-            "SourceM",
-            -(alphaI*(1.0 - alphaI)*rho1*rho2/rhoI)
-            *(dUc & fvc::grad(dUc))
-        );
-
-        phiSource += (phiSourceM + (fvc::interpolate(SourceM) & mesh.Sf()))*rAUf;
-    }
+    phiSource += (blendPhi + (fvc::interpolate(blendCell) & mesh.Sf()))*rAUf;
 
     phiHbyA += phiSource;
 

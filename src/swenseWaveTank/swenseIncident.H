@@ -148,6 +148,11 @@ class swenseIncident
         volVectorField dUc_;
         surfaceScalarField dPf_;
 
+        //- Absolute water and air pressures at the cell centres and boundary
+        //  faces (filled in update() always): gradients for a_W - a_A in F^v
+        volScalarField pWc_;
+        volScalarField pAc_;
+
     // Private member functions
 
         //- Rotation from the mesh frame to the wave frame (about z)
@@ -170,6 +175,16 @@ class swenseIncident
         //- Momentum-blend inputs at flat point ip: dU = uW - uA (mesh frame)
         //  and dP = pW - pA (absolute), the same points and fields as blendUP
         void dUdP(const label ip, const scalar t, vector& dU, scalar& dP) const;
+
+        //- dU, absolute pW and absolute pa at flat point ip (same points as dUdP)
+        void fieldsAt
+        (
+            const label ip,
+            const scalar t,
+            vector& dU,
+            scalar& pW,
+            scalar& pa
+        ) const;
 
         //- Weights of the water and air parts at x for the advected alphaI
         //  (document Rev3 16.3.5): W = clamp((alphaI - eps)/(1 - 2 eps), 0, 1),
@@ -271,6 +286,8 @@ public:
         bool momentumBlend() const { return momentumBlend_; }
         const volVectorField& dUc() const { return dUc_; }
         const surfaceScalarField& dPf() const { return dPf_; }
+        const volScalarField& pWc() const { return pWc_; }
+        const volScalarField& pAc() const { return pAc_; }
 
         //- Water pressure relative to the row surface value, per m2/s2 (scratch)
         const surfaceScalarField& psiWf() const { return psiWf_; }
