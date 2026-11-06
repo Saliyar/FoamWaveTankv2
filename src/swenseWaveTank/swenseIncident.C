@@ -993,8 +993,8 @@ void Foam::swenseIncident::update
         }
     }
 
-    // Momentum blend: dP = pW - pA at the faces (same points as blendUP)
-    if (momentumBlend_)
+    // dP = pW - pA at the faces (same points as blendUP), always: used by the
+    // momentum blend and by the velocity-blend F^v
     {
         vector dU;
         scalar dP;

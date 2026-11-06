@@ -61,11 +61,8 @@
     const volScalarField& pAc = incident.pAc();
     const volVectorField& dUc = incident.dUc();
 
-    surfaceScalarField dPface("dPface", fvc::interpolate(pWc - pAc));
-    if (incident.momentumBlend())
-    {
-        dPface = incident.dPf();
-    }
+    // dP = pW - pA at the faces, absolute, sampled as in blendUP (same on both paths)
+    const surfaceScalarField& dPface = incident.dPf();
 
     const surfaceScalarField blendPhi
     (
