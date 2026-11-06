@@ -39,6 +39,16 @@
 
     UcEqn.relax();
 
+    // Interface force per unit area divided by rA, without the (rA)_f factor
+    // that the pressure corrector applies. Interface force (rho - rhoI) grad(psi),
+    // psi = (pW - pW at eta)/rho_w, in the interFoam balanced form (see theory doc Sec 16):
+    //     phiSource0 = -psi_f snGrad(rho - rhoI) |Sf|
+    const surfaceScalarField phiSource0
+    (
+        "phiSource0",
+        -incident.psiWf()*fvc::snGrad(rho - rhoI)*mesh.magSf()
+    );
+
     // Blend residual on the right-hand side of the Uc equation, theory eq. (compcons):
     //   right side = -grad(pC_hat) - pI grad(rho/rhoI) - rho F   (sigma = 0, advective form)
     // with F = F_I (eq. incmom) on the momentum blend and F = F^v (eq. Fv) on the
