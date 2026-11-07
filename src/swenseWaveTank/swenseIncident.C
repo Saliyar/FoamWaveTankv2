@@ -636,7 +636,7 @@ void Foam::swenseIncident::blendUP
     // blended linearly with alphaI, pI = alphaI pW + (1 - alphaI) pA, the form
     // used in the incident residual derivation. Only the sides that are
     // evaluated (weights above) enter; a side with zero weight is not used.
-    if (momentumBlend_ && momentumBlendPressure_)
+    // E1: the absolute blend is the only pressure convention (no momentumBlendPressure gate).
     {
         const scalar a =
             min(max((alphaI - 1e-6)/(1.0 - 2e-6), scalar(0)), scalar(1));
@@ -679,27 +679,6 @@ void Foam::swenseIncident::blendUP
         return;
     }
 
-    // Pressure (scratch fix): one side only, relative to its value at the
-    // surface of this (x, y) row; only the side that is used is evaluated
-    const scalar zRel = x.z() - eta;
-    const label r = etaIdx_[ip];
-
-    if (zRel <= 0)
-    {
-        const scalar pW =
-            fastEval_
-          ? rhoWater_*(pExPt_[ip] - magG_*(x - refPos_).z())
-          : waterP(x, t);
-        p = pW - pWs_[r];
-    }
-    else
-    {
-        if (!havePa)
-        {
-            airUP(ip, pa);
-        }
-        p = pa - pAs_[r];
-    }
 }
 
 
@@ -1023,12 +1002,14 @@ void Foam::swenseIncident::update
 // ************************************************************************* //
 
 
-// Scratch: psiWf = (pW(face) - pWs[row]) / rho1, water pressure relative to the row surface
+// psiWf = pW(face)/rho_w (absolute, diagnostic only since the absolute-pressure change)
 Foam::scalar Foam::swenseIncident::psiWValue(const label ip, const scalar t) const
 {
     const scalar pw = fastEval_
       ? rhoWater_*(pExPt_[ip] - magG_*(pts_[ip] - refPos_).z())
       : waterP(pts_[ip], t);
 
-    return (pw - pWs_[etaIdx_[ip]])/rhoWater_;
+    // E2: absolute water psi, no surface subtraction. pWs_ and pAs_ are kept
+    // only for diagnostics; the force uses pfInc/rhoI (swenseUcEqn.H), not this value.
+    return pw/rhoWater_;
 }

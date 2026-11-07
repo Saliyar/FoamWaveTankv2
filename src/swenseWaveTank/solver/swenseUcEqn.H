@@ -42,11 +42,14 @@
     // Interface force per unit area divided by rA, without the (rA)_f factor
     // that the pressure corrector applies. Interface force (rho - rhoI) grad(psi),
     // psi = (pW - pW at eta)/rho_w, in the interFoam balanced form (see theory doc Sec 16):
-    //     phiSource0 = -psi_f snGrad(rho - rhoI) |Sf|
+    //     phiSource0 = -psi_f snGrad(rho - rhoI) |Sf|,  psi_f = p_I,f/rhoI,f (E3)
+    // E3: psi_f = p_I,f / rhoI,f with the absolute face pressure pfInc. The
+    // second-order term p_I (rho - rhoI) grad(rhoI)/rhoI^2 of -p_I grad(rho/rhoI)
+    // is NOT included (not in the note's eq:compcons, deliberately omitted here).
     const surfaceScalarField phiSource0
     (
         "phiSource0",
-        -incident.psiWf()*fvc::snGrad(rho - rhoI)*mesh.magSf()
+        -(incident.pfInc()/fvc::interpolate(rhoI))*fvc::snGrad(rho - rhoI)*mesh.magSf()
     );
 
     // Blend residual on the right-hand side of the Uc equation, theory eq. (compcons):
@@ -56,7 +59,7 @@
     //   face part  : -(rho/rhoI)_f dP_f snGrad(alphaI) |Sf|,  dP = pW - pA (absolute)
     //   cell part  : momentum : +rho alphaI(1-alphaI) rho1 rho2/rhoI^2 dU.grad(dU)
     //                velocity : +rho alphaI(1-alphaI) [ (rho1-rho2)/rhoI (aW-aA) + dU.grad(dU) ]
-    // aW - aA = -grad(pW)/rho1 + grad(pA)/rho2. The psi-form phiSource0 is kept (note Sec. 11).
+    // aW - aA = -grad(pW)/rho1 + grad(pA)/rho2. phiSource0 uses psi = p_I/rhoI (E3).
     const volScalarField& pWc = incident.pWc();
     const volScalarField& pAc = incident.pAc();
     const volVectorField& dUc = incident.dUc();
