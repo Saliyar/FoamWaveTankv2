@@ -190,7 +190,7 @@ Foam::swenseIncident::swenseIncident
     dUc_
     (
         IOobject("dUc", mesh.time().timeName(), mesh,
-            IOobject::NO_READ, IOobject::NO_WRITE),
+            IOobject::NO_READ, IOobject::AUTO_WRITE),
         mesh,
         dimensionedVector("dUc", dimVelocity, vector::zero)
     ),
@@ -204,14 +204,14 @@ Foam::swenseIncident::swenseIncident
     pWc_
     (
         IOobject("pWc", mesh.time().timeName(), mesh,
-            IOobject::NO_READ, IOobject::NO_WRITE),
+            IOobject::NO_READ, IOobject::AUTO_WRITE),
         mesh,
         dimensionedScalar("pWc", dimPressure, 0.0)
     ),
     pAc_
     (
         IOobject("pAc", mesh.time().timeName(), mesh,
-            IOobject::NO_READ, IOobject::NO_WRITE),
+            IOobject::NO_READ, IOobject::AUTO_WRITE),
         mesh,
         dimensionedScalar("pAc", dimPressure, 0.0)
     )
