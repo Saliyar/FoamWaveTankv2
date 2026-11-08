@@ -949,15 +949,30 @@ void Foam::swenseIncident::update
         vector dU;
         scalar pW, pa;
 
+        // Air-fill v2: the incident fill is used only inside the band
+        // |z - eta| <= guard_, the same guard weights() uses. Outside the band
+        // dUc, pWc and pAc are zero (deep water has no valid air field; the
+        // air region above the band has no valid water field).
+        auto inBand = [&](const scalar z, const label ip) -> bool
+        {
+            return mag(z - etaAt(ip, t)) <= guard_;
+        };
+
         forAll(dUc_, celli)
         {
-            fieldsAt(celli, t, dU, pW, pa);
-            // Air-fill fix: dUc = 0 below the cut-off z = eta - d_g (deep water).
-            // The air field is not valid there; pWc and pAc are unchanged.
-            dUc_[celli] =
-                (mesh_.C()[celli].z() < etaAt(celli, t) - guard_) ? vector::zero : dU;
-            pWc_[celli] = pW;
-            pAc_[celli] = pa;
+            if (inBand(mesh_.C()[celli].z(), celli))
+            {
+                fieldsAt(celli, t, dU, pW, pa);
+                dUc_[celli] = dU;
+                pWc_[celli] = pW;
+                pAc_[celli] = pa;
+            }
+            else
+            {
+                dUc_[celli] = vector::zero;
+                pWc_[celli] = 0.0;
+                pAc_[celli] = 0.0;
+            }
         }
 
         label ipc = offCb_;
@@ -966,12 +981,19 @@ void Foam::swenseIncident::update
         {
             forAll(dUc_.boundaryField()[patchi], facei)
             {
-                fieldsAt(ipc, t, dU, pW, pa);
-                // Air-fill fix: same cut-off on the boundary faces
-                dUc_.boundaryFieldRef()[patchi][facei] =
-                    (pts_[ipc].z() < etaAt(ipc, t) - guard_) ? vector::zero : dU;
-                pWc_.boundaryFieldRef()[patchi][facei] = pW;
-                pAc_.boundaryFieldRef()[patchi][facei] = pa;
+                if (inBand(pts_[ipc].z(), ipc))
+                {
+                    fieldsAt(ipc, t, dU, pW, pa);
+                    dUc_.boundaryFieldRef()[patchi][facei] = dU;
+                    pWc_.boundaryFieldRef()[patchi][facei] = pW;
+                    pAc_.boundaryFieldRef()[patchi][facei] = pa;
+                }
+                else
+                {
+                    dUc_.boundaryFieldRef()[patchi][facei] = vector::zero;
+                    pWc_.boundaryFieldRef()[patchi][facei] = 0.0;
+                    pAc_.boundaryFieldRef()[patchi][facei] = 0.0;
+                }
                 ++ipc;
             }
         }
