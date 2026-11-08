@@ -949,30 +949,34 @@ void Foam::swenseIncident::update
         vector dU;
         scalar pW, pa;
 
-        // Air-fill v2: the incident fill is used only inside the band
-        // |z - eta| <= guard_, the same guard weights() uses. Outside the band
-        // dUc, pWc and pAc are zero (deep water has no valid air field; the
-        // air region above the band has no valid water field).
-        auto inBand = [&](const scalar z, const label ip) -> bool
+        // Per-field gates, each on its own side of the interface (RULE):
+        //   dUc: both sides needed, so band |z - eta| <= guard_ only.
+        //   pWc: water is valid below eta + guard_, so zero only above it.
+        //   pAc: air is valid above eta - guard_, so zero only below it.
+        // The gates are evaluated independently, so pWc is kept in the deep
+        // region and pAc is kept above the band.
+        auto gates = [&](const scalar z, const label ip,
+                         bool& dUOk, bool& pWOk, bool& pAOk) -> void
         {
-            return mag(z - etaAt(ip, t)) <= guard_;
+            const scalar dz = z - etaAt(ip, t);
+            dUOk = mag(dz) <= guard_;
+            pWOk = dz <= guard_;
+            pAOk = dz >= -guard_;
         };
 
         forAll(dUc_, celli)
         {
-            if (inBand(mesh_.C()[celli].z(), celli))
+            bool dUOk, pWOk, pAOk;
+            gates(mesh_.C()[celli].z(), celli, dUOk, pWOk, pAOk);
+
+            if (dUOk || pWOk || pAOk)
             {
                 fieldsAt(celli, t, dU, pW, pa);
-                dUc_[celli] = dU;
-                pWc_[celli] = pW;
-                pAc_[celli] = pa;
             }
-            else
-            {
-                dUc_[celli] = vector::zero;
-                pWc_[celli] = 0.0;
-                pAc_[celli] = 0.0;
-            }
+
+            dUc_[celli] = dUOk ? dU : vector::zero;
+            pWc_[celli] = pWOk ? pW : 0.0;
+            pAc_[celli] = pAOk ? pa : 0.0;
         }
 
         label ipc = offCb_;
@@ -981,19 +985,17 @@ void Foam::swenseIncident::update
         {
             forAll(dUc_.boundaryField()[patchi], facei)
             {
-                if (inBand(pts_[ipc].z(), ipc))
+                bool dUOk, pWOk, pAOk;
+                gates(pts_[ipc].z(), ipc, dUOk, pWOk, pAOk);
+
+                if (dUOk || pWOk || pAOk)
                 {
                     fieldsAt(ipc, t, dU, pW, pa);
-                    dUc_.boundaryFieldRef()[patchi][facei] = dU;
-                    pWc_.boundaryFieldRef()[patchi][facei] = pW;
-                    pAc_.boundaryFieldRef()[patchi][facei] = pa;
                 }
-                else
-                {
-                    dUc_.boundaryFieldRef()[patchi][facei] = vector::zero;
-                    pWc_.boundaryFieldRef()[patchi][facei] = 0.0;
-                    pAc_.boundaryFieldRef()[patchi][facei] = 0.0;
-                }
+
+                dUc_.boundaryFieldRef()[patchi][facei] = dUOk ? dU : vector::zero;
+                pWc_.boundaryFieldRef()[patchi][facei] = pWOk ? pW : 0.0;
+                pAc_.boundaryFieldRef()[patchi][facei] = pAOk ? pa : 0.0;
                 ++ipc;
             }
         }
