@@ -952,7 +952,10 @@ void Foam::swenseIncident::update
         forAll(dUc_, celli)
         {
             fieldsAt(celli, t, dU, pW, pa);
-            dUc_[celli] = dU;
+            // Air-fill fix: dUc = 0 below the cut-off z = eta - d_g (deep water).
+            // The air field is not valid there; pWc and pAc are unchanged.
+            dUc_[celli] =
+                (mesh_.C()[celli].z() < etaAt(celli, t) - guard_) ? vector::zero : dU;
             pWc_[celli] = pW;
             pAc_[celli] = pa;
         }
@@ -964,7 +967,9 @@ void Foam::swenseIncident::update
             forAll(dUc_.boundaryField()[patchi], facei)
             {
                 fieldsAt(ipc, t, dU, pW, pa);
-                dUc_.boundaryFieldRef()[patchi][facei] = dU;
+                // Air-fill fix: same cut-off on the boundary faces
+                dUc_.boundaryFieldRef()[patchi][facei] =
+                    (pts_[ipc].z() < etaAt(ipc, t) - guard_) ? vector::zero : dU;
                 pWc_.boundaryFieldRef()[patchi][facei] = pW;
                 pAc_.boundaryFieldRef()[patchi][facei] = pa;
                 ++ipc;
