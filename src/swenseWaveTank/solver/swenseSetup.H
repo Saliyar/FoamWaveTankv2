@@ -343,6 +343,9 @@ volScalarField psiProj
     psiProjTypes
 );
 
+// The projection uses the flux of its matrix (as p_rgh in the plain solvers)
+mesh.setFluxRequired(psiProj.name());
+
 // Initial incident step (spec steps 1b to 1d) with the initial alphaI: the
 // incident flux and the corrected incident velocity of level 0
 #include "swenseIncidentStep.H"
