@@ -6,6 +6,12 @@
     // 1b, 1c: momentum blend in the cells, raw face velocity on the faces
     incident.blend(alphaI);
 
+    // Logging only: |grad UInc| of the raw blend, before the projection
+    if (budgetOn)
+    {
+        budgetRawGradMag = mag(fvc::grad(incident.UInc()))().primitiveField();
+    }
+
     // 1/rhoI_f with rhoI_f = a_f rho_w + (1 - a_f) rho_a, a_f the linear face
     // value of alphaI (rhoI is linear in alphaI)
     const surfaceScalarField rRhoIf("rRhoIf", 1.0/linearInterpolate(rhoI));

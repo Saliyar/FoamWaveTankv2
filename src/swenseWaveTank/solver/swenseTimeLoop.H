@@ -53,6 +53,12 @@ while (runTime.run())
         }
     }
 
+    // Logging only: term budget of the Uc equation (switch budgetTerms)
+    if (budgetOn)
+    {
+        #include "swenseBudget.H"
+    }
+
     // Discrete invariance (Theorem 6) and incident divergence (G1, G2)
     Info<< "SWENSE check: max|alpha1 - alphaI| = "
         << max(mag(alpha1 - alphaI)).value()
