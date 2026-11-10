@@ -1,9 +1,11 @@
-// Pressure corrector for the complementary pressure pc (SWENSE form)
+// Pressure equation for pc = p - pInc - Drho gh (momentum_swense_Rev1,
+// eq. 34). It constrains the complementary flux alone:
+//   sum_f phiComp_f = 0,
+//   phiComp_f = phiH_f - rAU_f (gh_f snGrad(Drho) + snGrad(pc)) |Sf|.
+// The incident flux is not in it (M6).
 {
     volScalarField rAU("rAU", 1.0/UcEqn.A());
     surfaceScalarField rAUf("rAUf", fvc::interpolate(rAU));
-    // Kept for the flux correction after a mesh motion (swenseCorrectPhi.H)
-    rAUfPrev = rAUf;
     volVectorField HbyA(constrainHbyA(rAU*UcEqn.H(), Uc, pc));
 
     surfaceScalarField phiHbyA
@@ -23,12 +25,14 @@
         adjustPhi(phiHbyA, Uc, pc);
     }
 
-    // Blend residual as face fluxes times rAU: the same blendPhi and blendCell as
-    // the Uc predictor (swenseUcEqn.H), the cell part through its face interpolate
-    surfaceScalarField phiSource(phiSource0*rAUf);
-    phiSource += (blendPhi + (fvc::interpolate(blendCell) & mesh.Sf()))*rAUf;
+    // Restoring force of the displaced interface, -gh_f snGrad(Drho)
+    surfaceScalarField phig
+    (
+        "phig",
+        -ghf*fvc::snGrad(Drho)*rAUf*mesh.magSf()
+    );
 
-    phiHbyA += phiSource;
+    phiHbyA += phig;
 
     constrainPressure(pc, Uc, phiHbyA, rAUf);
 
@@ -50,31 +54,17 @@
          && pimple.finalNonOrthogonalIter()
         )
         {
-            if (includeDivUInc)
-            {
-                solve(pcEqn == fvc::div(phiInc), mesh.solverDict("pcFinal"));
-            }
-            else
-            {
-                pcEqn.solve(mesh.solverDict("pcFinal"));
-            }
+            pcEqn.solve(mesh.solverDict("pcFinal"));
         }
         else
         {
-            if (includeDivUInc)
-            {
-                solve(pcEqn == fvc::div(phiInc));
-            }
-            else
-            {
-                pcEqn.solve();
-            }
+            pcEqn.solve();
         }
 
         if (pimple.finalNonOrthogonalIter())
         {
             phiComp = phiHbyA - pcEqn.flux();
-            Uc = HbyA + rAU*fvc::reconstruct((phiSource - pcEqn.flux())/rAUf);
+            Uc = HbyA + rAU*fvc::reconstruct((phig - pcEqn.flux())/rAUf);
             Uc.correctBoundaryConditions();
         }
     }
@@ -85,11 +75,11 @@
         Ucf += n*(phiComp/mesh.magSf() - (n & Ucf));
     }
 
-    // Total flux relative to the mesh (absolute phiComp + phiInc minus meshPhi)
+    // Total fields (Section 12.4)
     phi == phiComp + phiInc - meshPhi;
     #include "continuityErrs.H"
 
     U == Uc + incident.UInc();
-    p == pc + pStar;
+    p == incident.pInc() + pc + Drho*gh;
     p_rgh == p - rho*gh;
 }
