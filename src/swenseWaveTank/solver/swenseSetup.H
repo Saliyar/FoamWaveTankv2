@@ -100,7 +100,23 @@ const dimensionedScalar& rho2 = mixture.rho2();
 Info<< "Creating SWENSE incident fields\n" << endl;
 swenseIncident incident(mesh, externalWave(), rho1, rho2);
 
-// Incident flux of alphaI (also the flux of the alphaI boundary inletOutlet)
+// This revision (momentum_swense_Rev1, Part II) is for a fixed mesh: the
+// spec does not cover moving meshes
+if (mesh.dynamic())
+{
+    FatalErrorInFunction
+        << "The momentum-blend SWENSE (Rev1) is implemented for a static mesh"
+        << " only" << exit(FatalError);
+}
+
+// Wave models at the start time: eta for the initial alphaI and alphaH, and
+// the water and air fields for the initial incident step at the end of this
+// file
+externalWave->step();
+incident.evaluate(runTime.value());
+
+// Incident flux (projected, spec step 1d): the flux of the alphaI transport
+// and of the alphaI boundary inletOutlet. Set by the initial incident step
 surfaceScalarField phiInc
 (
     IOobject("phiInc", runTime.timeName(), mesh,
@@ -180,13 +196,14 @@ volScalarField rhoI
         IOobject::NO_READ, IOobject::NO_WRITE),
     swenseRho(alphaI, rho1, rho2)
 );
+rhoI.oldTime();
 
-// rho/rhoI, the density ratio of the pressure split (document 16.2)
-volScalarField rhoByRhoI
+// Density difference Drho = rho - rhoI (spec Section 12.2)
+volScalarField Drho
 (
-    IOobject("rhoByRhoI", runTime.timeName(), mesh,
+    IOobject("Drho", runTime.timeName(), mesh,
         IOobject::NO_READ, IOobject::NO_WRITE),
-    rho/rhoI
+    rho - rhoI
 );
 
 // HOS target for the relaxation zones, same initial value as alphaI
@@ -223,14 +240,6 @@ const dictionary& farfieldDict =
 swenseRelaxation relax(mesh, farfieldDict.subDict("relaxationZone"));
 const volScalarField& w = relax.weight();
 
-// Incident part of p: pStar = (rho/rhoI) pI (document eq. 16.2)
-volScalarField pStar
-(
-    IOobject("pStar", runTime.timeName(), mesh,
-        IOobject::NO_READ, IOobject::NO_WRITE),
-    incident.pInc()
-);
-
 // Reference height (constant/hRef, default 0) and gravity potential
 uniformDimensionedScalarField hRef
 (
@@ -249,11 +258,13 @@ dimensionedScalar ghRef
 volScalarField gh("gh", (g & mesh.C()) - ghRef);
 surfaceScalarField ghf("ghf", (g & mesh.Cf()) - ghRef);
 
+// Total pressure p = pInc + pc + Drho gh (spec Section 12.4); pInc is set by
+// the initial incident step below
 volScalarField p
 (
     IOobject("p", runTime.timeName(), mesh,
         IOobject::NO_READ, IOobject::AUTO_WRITE),
-    pc + pStar
+    incident.pInc() + pc + Drho*gh
 );
 
 volScalarField p_rgh
@@ -271,7 +282,7 @@ setRefCell(pc, pimple.dict(), pcRefCell, pcRefValue);
 if (pc.needReference())
 {
     pc += dimensionedScalar("pc", pc.dimensions(), pcRefValue - getRefCellValue(pc, pcRefCell));
-    p = pc + pStar;
+    p = incident.pInc() + pc + Drho*gh;
     p_rgh = p - rho*gh;
 }
 
@@ -308,25 +319,40 @@ surfaceVectorField Ucf(IOobject("Ucf", runTime.timeName(), mesh,
     Ucf += n*(phiComp/mesh.magSf() - (n & Ucf));
 }
 
-bool includeDivUInc
+// Potential of the incident flux projection (spec eq. 31): zero on the
+// atmosphere patch, zero gradient on every other boundary
+wordList psiProjTypes
 (
-    pimple.dict().lookupOrDefault<Switch>("includeDivUInc", false)
+    mesh.boundaryMesh().size(),
+    zeroGradientFvPatchScalarField::typeName
 );
+forAll(mesh.boundaryMesh(), patchi)
+{
+    if (mesh.boundaryMesh()[patchi].name() == "atmosphere")
+    {
+        psiProjTypes[patchi] = fixedValueFvPatchScalarField::typeName;
+    }
+}
 
-// rAUf of the last UcEqn (1 on the first step), for the flux correction after
-// a mesh motion (swenseCorrectPhi.H)
-surfaceScalarField rAUfPrev
+volScalarField psiProj
 (
-    IOobject("rAUfPrev", runTime.timeName(), mesh,
+    IOobject("psiProj", runTime.timeName(), mesh,
         IOobject::NO_READ, IOobject::NO_WRITE),
     mesh,
-    dimensionedScalar("rAUf", dimTime/dimDensity, 1)
+    dimensionedScalar("psiProj", dimDensity*dimArea/dimTime, 0.0),
+    psiProjTypes
 );
 
-// Flux correction after a mesh motion, switched as in waveFoam (default on a
-// dynamic mesh)
-bool correctPhi
-(
-    pimple.dict().getOrDefault("correctPhi", mesh.dynamic())
-);
+// Initial incident step (spec steps 1b to 1d) with the initial alphaI: the
+// incident flux and the corrected incident velocity of level 0
+#include "swenseIncidentStep.H"
 
+incident.UIncRW().oldTime();
+
+phi = phiComp + phiInc - meshPhi;
+rhoPhi = fvc::interpolate(rho)*phi;
+rhoPhiI = fvc::interpolate(rhoI)*phiIRel;
+
+U == Uc + incident.UInc();
+p = incident.pInc() + pc + Drho*gh;
+p_rgh = p - rho*gh;
