@@ -5,18 +5,21 @@ Class
 Description
     Blended incident (wave) fields for the SWENSE solver.
 
-    Water and air incident fields are blended with the incident volume
-    fraction alphaI (document swense_blended_incident, Section 6):
+    Momentum blend of the water and air incident fields with the incident
+    volume fraction alphaI (momentum_swense_Rev1, Definition 1 and Section
+    12.1), gamma = alphaI limited to [0, 1]:
 
-        alphaI = clamp(0.5 - (z - eta)/delta, 0, 1)
-        UInc   = alphaI UW + (1 - alphaI) UA
-        pInc   = alphaI pW + (1 - alphaI) pA
-        rhoI   = alphaI rhoW + (1 - alphaI) rhoA
+        rhoI = gamma rhoW + (1 - gamma) rhoA
+        mI   = gamma rhoW UW + (1 - gamma) rhoA UA
+        UInc = mI/rhoI
+        pInc = gamma pW + (1 - gamma) pA              [output only]
 
-    The blending law is only a starting weight: alphaI is then advected with
-    the incident velocity by the solver (Section 14.2), so the blend weight
-    returned by blendWeight() is used only for its initial value and for the
-    farfield boundary condition.
+    Faces: a_f = linear face value of gamma, W_f = a_f rhoW/rhoI_f,
+        UfInc = W_f UW + (1 - W_f) UA                 [raw, not projected]
+
+    alphaI is advected by the solver. blendWeight() gives its initial value,
+    the relaxation target and the farfield boundary value:
+        clamp(0.5 - (z - eta)/delta, 0, 1)
 
     Water (alphaI = 1 region), Grid2Grid, in the wave frame:
         UW = U_grid2grid(x, t)
@@ -29,9 +32,8 @@ Description
         x_w = R(theta) (x - referencePosition),  R(theta) = [c -s; s c]
     The Air2Air time is the Grid2Grid time t + referenceTime.
 
-    The water or air value is only evaluated where its weight is non-zero, so
-    Air2Air is never called deep in the water and Grid2Grid is never called
-    deep in the air.
+    The water value is evaluated only where gamma > 0 (a_f > 0 on faces) and
+    the air value only where gamma < 1 (a_f < 1).
 
     Blending thickness delta is read from waveProperties (blendThickness,
     default 0.024 m).
@@ -96,15 +98,6 @@ class swenseIncident
         //- Blending thickness delta (m)
         const scalar delta_;
 
-        //- Momentum-weighted blend and linear absolute pressure blend
-        //  (waveProperties momentumBlend, default false: current scheme)
-        const bool momentumBlend_;
-
-        //- Linear absolute pressure blend in blendUP (waveProperties
-        //  momentumBlendPressure, default false: one-sided pressure
-        //  relative to eta). Used only when momentumBlend_ is true.
-        const bool momentumBlendPressure_;
-
         //- Guard distance d_g = max(delta, 3 dz), dz = cell height at the
         //  interface (document Rev4, 16.3 rule 5)
         scalar guard_;
@@ -124,9 +117,7 @@ class swenseIncident
         //- [option A] Grid2Grid values at all flat points for the current step
         bool fastEval_;
         scalarField etaPt_, pExPt_;
-        // Scratch fix: per-row surface pressures (water, air) at (x, y, eta_r),
-        // and one flat point per row to read eta_r
-        scalarField pWs_, pAs_;
+        //- One flat point per distinct (x, y) row, to read eta of the row
         labelList rowPt_;
         vectorField UPt_;
 
@@ -140,18 +131,6 @@ class swenseIncident
         volVectorField UInc_;
         volScalarField pInc_;
         surfaceVectorField UfInc_;
-        surfaceScalarField pfInc_;
-        surfaceScalarField psiWf_;
-
-        //- Momentum blend (filled in update() when momentumBlend_ is true):
-        //  dUc_ = uW - uA at the cell centres, dPf_ = pW - pA at the faces
-        volVectorField dUc_;
-        surfaceScalarField dPf_;
-
-        //- Absolute water and air pressures at the cell centres and boundary
-        //  faces (filled in update() always): gradients for a_W - a_A in F^v
-        volScalarField pWc_;
-        volScalarField pAc_;
 
     // Private member functions
 
@@ -165,55 +144,50 @@ class swenseIncident
         vector waterU(const point& x, const scalar t) const;
         scalar waterP(const point& x, const scalar t) const;
 
-        //- psiWf value at flat point ip (scratch)
-        scalar psiWValue(const label ip, const scalar t) const;
-
         //- Air velocity (mesh frame) and pressure at flat point ip, from the
         //  Air2Air tables (one evaluation for both)
         vector airUP(const label ip, scalar& p) const;
 
-        //- Momentum-blend inputs at flat point ip: dU = uW - uA (mesh frame)
-        //  and dP = pW - pA (absolute), the same points and fields as blendUP
-        void dUdP(const label ip, const scalar t, vector& dU, scalar& dP) const;
+        //- Water velocity and absolute water pressure at flat point ip (the
+        //  per-step Grid2Grid values when they are current)
+        vector waterUAt(const label ip, const scalar t) const;
+        scalar waterPAt(const label ip, const scalar t) const;
 
-        //- dU, absolute pW and absolute pa at flat point ip (same points as dUdP)
-        void fieldsAt
+        //- Log only: count a water value used above eta + d_g or an air
+        //  value used below eta - d_g
+        void countDrift
         (
             const label ip,
             const scalar t,
-            vector& dU,
-            scalar& pW,
-            scalar& pa
+            const bool useWater,
+            const bool useAir
         ) const;
 
-        //- Weights of the water and air parts at x for the advected alphaI
-        //  (document Rev3 16.3.5): W = clamp((alphaI - eps)/(1 - 2 eps), 0, 1),
-        //  water part only where W > 0 and z - eta <= delta, air part only
-        //  where W < 1 and z - eta >= -delta; a part that is not evaluated has
-        //  weight exactly 0 and the other part weight exactly 1
-        void weights
+        //- Momentum blend at a cell-value point ip for the water fraction
+        //  gamma (spec step 1b): u = mI/rhoI. p is the output pressure
+        //  gamma pW + (1 - gamma) pA. Water only where gamma > 0, air only
+        //  where gamma < 1
+        void blendCell
         (
-            const point& x,
-            const scalar eta,
-            const scalar alphaI,
-            scalar& wWater,
-            scalar& wAir
+            const label ip,
+            const scalar t,
+            const scalar gamma,
+            vector& u,
+            scalar& p
+        ) const;
+
+        //- Raw face velocity at a face point ip for the face fraction af
+        //  (spec step 1c): W_f uW + (1 - W_f) uA
+        vector blendFace
+        (
+            const label ip,
+            const scalar t,
+            const scalar af
         ) const;
 
         //- Grid2Grid eta at flat point ip: the per-step value when it is
         //  current for time t, otherwise evaluated here
         scalar etaAt(const label ip, const scalar t) const;
-
-        //- Blended velocity u and pressure p at flat point ip for the advected
-        //  alphaI (weights evaluated once for both)
-        void blendUP
-        (
-            const label ip,
-            const scalar t,
-            const scalar alphaI,
-            vector& u,
-            scalar& p
-        ) const;
 
         //- Point tables of the mesh: flat order cells, boundary cells, faces,
         //  boundary faces (the order of the update loops), distinct (x, y) for
@@ -262,10 +236,15 @@ public:
         //  centres for time t (relaxation target, initial alphaI)
         volScalarField blendAlpha(const scalar t) const;
 
-        //- Update all blended incident fields for time t, blended with the
-        //  advected incident fraction alphaI (cells, then faces with alphaIf
-        //  = linear interpolation of alphaI)
-        void update(const scalar t, const volScalarField& alphaI);
+        //- Evaluate the water and air wave models for time t (no blending).
+        //  Call once per time step before blendAlpha() and blend()
+        void evaluate(const scalar t);
+
+        //- Momentum blend of the incident fields at the time of the last
+        //  evaluate(), with the incident volume fraction alphaI (spec steps
+        //  1b and 1c): UInc = mI/rhoI in the cells, the raw face velocity
+        //  UfInc with the linear face value of alphaI, and pInc for output
+        void blend(const volScalarField& alphaI);
 
         //- Rebuild the evaluation points from the current cell and face
         //  centres after a mesh motion (call when mesh.moving()). Only the
@@ -281,16 +260,6 @@ public:
         volVectorField& UIncRW() { return UInc_; }
         const volScalarField& pInc() const { return pInc_; }
         const surfaceVectorField& UfInc() const { return UfInc_; }
-        const surfaceScalarField& pfInc() const { return pfInc_; }
-        //- Momentum-blend switch and the inputs of its residual and mass source
-        bool momentumBlend() const { return momentumBlend_; }
-        const volVectorField& dUc() const { return dUc_; }
-        const surfaceScalarField& dPf() const { return dPf_; }
-        const volScalarField& pWc() const { return pWc_; }
-        const volScalarField& pAc() const { return pAc_; }
-
-        //- Water pressure relative to the row surface value, per m2/s2 (scratch)
-        const surfaceScalarField& psiWf() const { return psiWf_; }
 
         //- Surface rows (x, y, 0) and Grid2Grid eta of row r at time t
         const pointField& etaPts() const { return etaPts_; }

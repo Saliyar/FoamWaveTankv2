@@ -12,8 +12,8 @@
 #include <utility>
 #include <vector>
 
-// Drift of alphaI from eta (weights()): counted there, reported once per call
-// of update() as one log line, instead of one warning per cell
+// Wave-model values used outside the guard distance (countDrift()): counted
+// there, reported by blend() as one log line
 static Foam::label driftCount = 0;
 static Foam::scalar driftWorstZ = 0.0;
 static Foam::point driftWorstX = Foam::point::zero;
@@ -136,16 +136,6 @@ Foam::swenseIncident::swenseIncident
     Tsoft_(swenseRamp::Tsoft(mesh.thisDb())),
     tNow_(0.0),
     delta_(blendThickness(mesh.thisDb())),
-    momentumBlend_
-    (
-        mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
-            .lookupOrDefault<bool>("momentumBlend", false)
-    ),
-    momentumBlendPressure_
-    (
-        mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
-            .lookupOrDefault<bool>("momentumBlendPressure", false)
-    ),
     guard_(0.0),
     rhoAir_(rhoAir.value()),
     magG_
@@ -172,48 +162,6 @@ Foam::swenseIncident::swenseIncident
             IOobject::NO_READ, IOobject::NO_WRITE),
         mesh,
         dimensionedVector("UfInc", dimVelocity, vector::zero)
-    ),
-    pfInc_
-    (
-        IOobject("pfInc", mesh.time().timeName(), mesh,
-            IOobject::NO_READ, IOobject::NO_WRITE),
-        mesh,
-        dimensionedScalar("pfInc", dimPressure, 0.0)
-    ),
-    psiWf_
-    (
-        IOobject("psiWf", mesh.time().timeName(), mesh,
-            IOobject::NO_READ, IOobject::NO_WRITE),
-        mesh,
-        dimensionedScalar("psiWf", dimVelocity*dimVelocity, 0.0)
-    ),
-    dUc_
-    (
-        IOobject("dUc", mesh.time().timeName(), mesh,
-            IOobject::NO_READ, IOobject::AUTO_WRITE),
-        mesh,
-        dimensionedVector("dUc", dimVelocity, vector::zero)
-    ),
-    dPf_
-    (
-        IOobject("dPf", mesh.time().timeName(), mesh,
-            IOobject::NO_READ, IOobject::NO_WRITE),
-        mesh,
-        dimensionedScalar("dPf", dimPressure, 0.0)
-    ),
-    pWc_
-    (
-        IOobject("pWc", mesh.time().timeName(), mesh,
-            IOobject::NO_READ, IOobject::AUTO_WRITE),
-        mesh,
-        dimensionedScalar("pWc", dimPressure, 0.0)
-    ),
-    pAc_
-    (
-        IOobject("pAc", mesh.time().timeName(), mesh,
-            IOobject::NO_READ, IOobject::AUTO_WRITE),
-        mesh,
-        dimensionedScalar("pAc", dimPressure, 0.0)
     )
 {
     const dictionary& wp =
@@ -543,143 +491,128 @@ Foam::scalar Foam::swenseIncident::etaAt(const label ip, const scalar t) const
 }
 
 
-void Foam::swenseIncident::weights
+Foam::vector Foam::swenseIncident::waterUAt
 (
-    const point& x,
-    const scalar eta,
-    const scalar alphaI,
-    scalar& wWater,
-    scalar& wAir
+    const label ip,
+    const scalar t
 ) const
 {
-    const scalar eps = 1e-6;
-    const scalar a = min(max((alphaI - eps)/(1.0 - 2.0*eps), scalar(0)), scalar(1));
+    return fastEval_ ? UPt_[ip] : waterU(pts_[ip], t);
+}
 
-    // Momentum blend (waveProperties momentumBlend true): the water weight is
-    // the share of the incident momentum density, W = a rhoW/rhoI, with rhoI
-    // blended by the same a. Otherwise the water weight is a itself.
-    const scalar rhoI = a*rhoWater_ + (1.0 - a)*rhoAir_;
-    const scalar W = momentumBlend_ ? a*rhoWater_/rhoI : a;
 
-    const scalar zRel = x.z() - eta;
+Foam::scalar Foam::swenseIncident::waterPAt
+(
+    const label ip,
+    const scalar t
+) const
+{
+    return
+        fastEval_
+      ? rhoWater_*(pExPt_[ip] - magG_*(pts_[ip] - refPos_).z())
+      : waterP(pts_[ip], t);
+}
 
-    const bool evalWater = (W > 0) && (zRel <= guard_);
-    const bool evalAir = (W < 1) && (zRel >= -guard_);
 
-    if (!evalWater && !evalAir)
-    {
-        FatalErrorInFunction
-            << "alphaI = " << alphaI << " at " << x
-            << " (z - eta = " << zRel << ") is outside both incident fields:"
-            << " alphaI has drifted from eta" << exit(FatalError);
-    }
+void Foam::swenseIncident::countDrift
+(
+    const label ip,
+    const scalar t,
+    const bool useWater,
+    const bool useAir
+) const
+{
+    // Log only: a water value used above eta + d_g or an air value used
+    // below eta - d_g means that alphaI has left the surface of the wave model
+    const scalar zRel = pts_[ip].z() - etaAt(ip, t);
 
-    // Exactly 0 for a part that is not evaluated, exactly 1 for the other
-    wWater = evalWater ? (evalAir ? W : scalar(1)) : scalar(0);
-    wAir = evalAir ? (evalWater ? 1.0 - W : scalar(1)) : scalar(0);
-
-    if (W > 0 && W < 1 && (zRel > guard_ || zRel < -guard_))
+    if ((useWater && zRel > guard_) || (useAir && zRel < -guard_))
     {
         ++driftCount;
 
         if (mag(zRel) > driftWorstZ)
         {
             driftWorstZ = mag(zRel);
-            driftWorstX = x;
+            driftWorstX = pts_[ip];
         }
     }
 }
 
 
-void Foam::swenseIncident::blendUP
+void Foam::swenseIncident::blendCell
 (
     const label ip,
     const scalar t,
-    const scalar alphaI,
+    const scalar gamma,
     vector& u,
     scalar& p
 ) const
 {
-    const point& x = pts_[ip];
+    // Momentum blend (spec Definition 1, step 1b):
+    //   rhoI = gamma rho_w + (1 - gamma) rho_a
+    //   mI   = gamma rho_w uW + (1 - gamma) rho_a uA,   uI = mI/rhoI
+    // The water field is used only where gamma > 0 and the air field only
+    // where gamma < 1 (M2). The pressure is for output only.
+    const bool useWater = gamma > 0;
+    const bool useAir = gamma < 1;
 
-    // Weights once per point, used by the velocity only (scratch fix)
-    const scalar eta = etaAt(ip, t);
-    scalar wWater, wAir;
-    weights(x, eta, alphaI, wWater, wAir);
-
-    u = Zero;
+    vector mI(Zero);
     p = 0.0;
 
-    scalar pa = 0.0;
-    bool havePa = false;
-
-    if (wWater > 0)
+    if (useWater)
     {
-        if (fastEval_)
-        {
-            u += wWater*UPt_[ip];
-        }
-        else
-        {
-            u += wWater*waterU(x, t);
-        }
+        mI += gamma*rhoWater_*waterUAt(ip, t);
+        p += gamma*waterPAt(ip, t);
     }
 
-    if (wAir > 0)
+    if (useAir)
     {
+        scalar pa = 0.0;
         const vector Ua = airUP(ip, pa);
-        havePa = true;
-        u += wAir*Ua;
+        mI += (1.0 - gamma)*rhoAir_*Ua;
+        p += (1.0 - gamma)*pa;
     }
 
-    // Momentum blend (waveProperties momentumBlend true): absolute pressures
-    // blended linearly with alphaI, pI = alphaI pW + (1 - alphaI) pA, the form
-    // used in the incident residual derivation. Only the sides that are
-    // evaluated (weights above) enter; a side with zero weight is not used.
-    // E1: the absolute blend is the only pressure convention (no momentumBlendPressure gate).
-    {
-        const scalar a =
-            min(max((alphaI - 1e-6)/(1.0 - 2e-6), scalar(0)), scalar(1));
+    u = mI/(gamma*rhoWater_ + (1.0 - gamma)*rhoAir_);
 
-        const bool useW = wWater > 0;
-        const bool useA = wAir > 0;
-
-        scalar pWabs = 0.0, pAabs = 0.0;
-
-        if (useW)
-        {
-            pWabs =
-                fastEval_
-              ? rhoWater_*(pExPt_[ip] - magG_*(x - refPos_).z())
-              : waterP(x, t);
-        }
-
-        if (useA)
-        {
-            if (!havePa)
-            {
-                airUP(ip, pa);
-            }
-            pAabs = pa;
-        }
-
-        if (useW && useA)
-        {
-            p = a*pWabs + (1.0 - a)*pAabs;
-        }
-        else if (useW)
-        {
-            p = pWabs;
-        }
-        else
-        {
-            p = pAabs;
-        }
-
-        return;
-    }
-
+    countDrift(ip, t, useWater, useAir);
 }
+
+
+Foam::vector Foam::swenseIncident::blendFace
+(
+    const label ip,
+    const scalar t,
+    const scalar af
+) const
+{
+    // Raw face velocity (spec step 1c): mass-fraction weight of the face
+    //   W_f = a_f rho_w/(a_f rho_w + (1 - a_f) rho_a)
+    //   u_f = W_f uW(x_f) + (1 - W_f) uA(x_f)
+    // uW only where a_f > 0, uA only where a_f < 1
+    const bool useWater = af > 0;
+    const bool useAir = af < 1;
+
+    const scalar Wf = af*rhoWater_/(af*rhoWater_ + (1.0 - af)*rhoAir_);
+
+    vector u(Zero);
+
+    if (useWater)
+    {
+        u += Wf*waterUAt(ip, t);
+    }
+
+    if (useAir)
+    {
+        scalar pa = 0.0;
+        u += (1.0 - Wf)*airUP(ip, pa);
+    }
+
+    countDrift(ip, t, useWater, useAir);
+
+    return u;
+}
+
 
 
 Foam::volScalarField Foam::swenseIncident::blendAlpha(const scalar t) const
@@ -744,59 +677,8 @@ void Foam::swenseIncident::movePoints()
 }
 
 
-void Foam::swenseIncident::fieldsAt
-(
-    const label ip,
-    const scalar t,
-    vector& dU,
-    scalar& pW,
-    scalar& pa
-) const
+void Foam::swenseIncident::evaluate(const scalar t)
 {
-    const point& x = pts_[ip];
-
-    const vector Ua = airUP(ip, pa);
-
-    const vector Uw = fastEval_ ? UPt_[ip] : waterU(x, t);
-    dU = Uw - Ua;
-
-    // Same pW as blendUP(): the fastEval_ path when it is set
-    pW =
-        fastEval_
-      ? rhoWater_*(pExPt_[ip] - magG_*(x - refPos_).z())
-      : waterP(x, t);
-}
-
-
-void Foam::swenseIncident::dUdP
-(
-    const label ip,
-    const scalar t,
-    vector& dU,
-    scalar& dP
-) const
-{
-    scalar pW = 0.0;
-    scalar pa = 0.0;
-    fieldsAt(ip, t, dU, pW, pa);
-    dP = pW - pa;
-}
-
-
-void Foam::swenseIncident::update
-(
-    const scalar t,
-    const volScalarField& alphaI
-)
-{
-    // One line for the drift events counted since the previous call
-    Info<< "SWENSE drift: " << driftCount
-        << " alphaI-drift events since the last update, worst |z - eta| = "
-        << driftWorstZ << " m at " << driftWorstX << endl;
-    driftCount = 0;
-    driftWorstZ = 0.0;
-    driftWorstX = Foam::point::zero;
-
     // Grid2Grid time is t + referenceTime; Air2Air uses the same time
     const scalar tAir = t + refTime_;
     tNow_ = t;
@@ -837,7 +719,7 @@ void Foam::swenseIncident::update
     }
     etaTime_ = t;
 
-    // Scratch fix: surface pressures once per step for every distinct (x, y) row
+    // One flat point per distinct (x, y) row, to read eta of the row
     if (rowPt_.size() != etaPts_.size())
     {
         rowPt_.setSize(etaPts_.size());
@@ -850,54 +732,49 @@ void Foam::swenseIncident::update
             }
         }
     }
-    pWs_.setSize(etaPts_.size());
-    pAs_.setSize(etaPts_.size());
-    forAll(etaPts_, r)
+}
+
+
+void Foam::swenseIncident::blend(const volScalarField& alphaI)
+{
+    const scalar t = tNow_;
+
+    driftCount = 0;
+    driftWorstZ = 0.0;
+    driftWorstX = Foam::point::zero;
+
+    // Incident water fraction gamma = alphaI limited to [0, 1], the same
+    // limit as the density function swenseRho
+    const volScalarField gamma
+    (
+        "gammaI",
+        min(max(alphaI, scalar(0)), scalar(1))
+    );
+
+    // Non-const access first: stores the old-time value of UInc before any
+    // cell value is changed
+    vectorField& Ui = UInc_.primitiveFieldRef();
+    scalarField& pi = pInc_.primitiveFieldRef();
+
+    // Cells (step 1b)
+    forAll(Ui, celli)
     {
-        const point xs(etaPts_[r].x(), etaPts_[r].y(), etaAt(rowPt_[r], t));
-        const scalar zws = (xs - refPos_).z();
-
-        pWs_[r] = waterP(xs, t);
-
-        if (!air_.valid())
-        {
-            pAs_[r] = -rhoAir_*magG_*zws;
-        }
-        else
-        {
-            const vector xw = toWave(xs - refPos_);
-            vector Uw;
-            scalar Pd;
-            air_->solver().flow(xw.x(), xw.y(), xs.z() - seaLevel_, Uw, Pd);
-            if (Tsoft_ > 0)
-            {
-                Pd *= ramp(t);
-            }
-
-            pAs_[r] = Pd - rhoAir_*magG_*zws;
-        }
+        blendCell(celli, t, gamma[celli], Ui[celli], pi[celli]);
     }
 
-    // Cells: blend with the advected alphaI (clamped to [0, 1])
-    const volVectorField& C = mesh_.C();
-
-    forAll(C, celli)
-    {
-        blendUP(celli, t, alphaI[celli], UInc_[celli], pInc_[celli]);
-    }
-
-    // Boundary patches of the cell fields: same blend, patch centres
+    // Boundary values of the cell fields: same blend at the patch face
+    // centres with the boundary value of gamma
     label ip = offCb_;
 
-    forAll(C.boundaryField(), patchi)
+    forAll(gamma.boundaryField(), patchi)
     {
-        const scalarField& ab = alphaI.boundaryField()[patchi];
+        const scalarField& gb = gamma.boundaryField()[patchi];
 
-        forAll(ab, facei)
+        forAll(gb, facei)
         {
-            blendUP
+            blendCell
             (
-                ip, t, ab[facei],
+                ip, t, gb[facei],
                 UInc_.boundaryFieldRef()[patchi][facei],
                 pInc_.boundaryFieldRef()[patchi][facei]
             );
@@ -905,140 +782,34 @@ void Foam::swenseIncident::update
         }
     }
 
-    // Faces: alphaIf is the linear interpolation of alphaI
-    const surfaceScalarField alphaIf(fvc::interpolate(alphaI));
+    // Faces (step 1c): a_f is the linear face value of gamma
+    const surfaceScalarField af("afI", linearInterpolate(gamma));
 
-    const scalarField& aif = alphaIf.internalField();
+    vectorField& Ufi = UfInc_.primitiveFieldRef();
 
-    forAll(aif, facei)
+    forAll(Ufi, facei)
     {
-        blendUP
-        (
-            offCf_ + facei, t, aif[facei],
-            UfInc_.primitiveFieldRef()[facei],
-            pfInc_.primitiveFieldRef()[facei]
-        );
-        psiWf_.primitiveFieldRef()[facei] = psiWValue(offCf_ + facei, t);
+        Ufi[facei] = blendFace(offCf_ + facei, t, af[facei]);
     }
-
-    const surfaceVectorField::Boundary& Cfb = mesh_.Cf().boundaryField();
 
     ip = offCfb_;
 
-    forAll(Cfb, patchi)
+    forAll(af.boundaryField(), patchi)
     {
-        const fvsPatchScalarField& ab = alphaIf.boundaryField()[patchi];
+        const fvsPatchScalarField& ab = af.boundaryField()[patchi];
 
-        forAll(Cfb[patchi], facei)
+        forAll(ab, facei)
         {
-            blendUP
-            (
-                ip, t, ab[facei],
-                UfInc_.boundaryFieldRef()[patchi][facei],
-                pfInc_.boundaryFieldRef()[patchi][facei]
-            );
-            psiWf_.boundaryFieldRef()[patchi][facei] = psiWValue(ip, t);
+            UfInc_.boundaryFieldRef()[patchi][facei] =
+                blendFace(ip, t, ab[facei]);
             ++ip;
         }
     }
 
-    // Momentum blend: dU = uW - uA at the cell centres and dP = pW - pA at
-    // the faces, at the same points as blendUP (not filled when the switch is off)
-    // Cell-centre dU, pW and pa, always (the velocity-blend F^v needs them too)
-    {
-        vector dU;
-        scalar pW, pa;
-
-        // Per-field gates, each on its own side of the interface (RULE):
-        //   dUc: both sides needed, so band |z - eta| <= guard_ only.
-        //   pWc: water is valid below eta + guard_, so zero only above it.
-        //   pAc: air is valid above eta - guard_, so zero only below it.
-        // The gates are evaluated independently, so pWc is kept in the deep
-        // region and pAc is kept above the band.
-        auto gates = [&](const scalar z, const label ip,
-                         bool& dUOk, bool& pWOk, bool& pAOk) -> void
-        {
-            const scalar dz = z - etaAt(ip, t);
-            dUOk = mag(dz) <= guard_;
-            pWOk = dz <= guard_;
-            pAOk = dz >= -guard_;
-        };
-
-        forAll(dUc_, celli)
-        {
-            bool dUOk, pWOk, pAOk;
-            gates(mesh_.C()[celli].z(), celli, dUOk, pWOk, pAOk);
-
-            if (dUOk || pWOk || pAOk)
-            {
-                fieldsAt(celli, t, dU, pW, pa);
-            }
-
-            dUc_[celli] = dUOk ? dU : vector::zero;
-            pWc_[celli] = pWOk ? pW : 0.0;
-            pAc_[celli] = pAOk ? pa : 0.0;
-        }
-
-        label ipc = offCb_;
-
-        forAll(dUc_.boundaryField(), patchi)
-        {
-            forAll(dUc_.boundaryField()[patchi], facei)
-            {
-                bool dUOk, pWOk, pAOk;
-                gates(pts_[ipc].z(), ipc, dUOk, pWOk, pAOk);
-
-                if (dUOk || pWOk || pAOk)
-                {
-                    fieldsAt(ipc, t, dU, pW, pa);
-                }
-
-                dUc_.boundaryFieldRef()[patchi][facei] = dUOk ? dU : vector::zero;
-                pWc_.boundaryFieldRef()[patchi][facei] = pWOk ? pW : 0.0;
-                pAc_.boundaryFieldRef()[patchi][facei] = pAOk ? pa : 0.0;
-                ++ipc;
-            }
-        }
-    }
-
-    // dP = pW - pA at the faces (same points as blendUP), always: used by the
-    // momentum blend and by the velocity-blend F^v
-    {
-        vector dU;
-        scalar dP;
-
-        forAll(dPf_.primitiveField(), facei)
-        {
-            dUdP(offCf_ + facei, t, dU, dP);
-            dPf_.primitiveFieldRef()[facei] = dP;
-        }
-
-        label ipf = offCfb_;
-
-        forAll(dPf_.boundaryField(), patchi)
-        {
-            forAll(dPf_.boundaryField()[patchi], facei)
-            {
-                dUdP(ipf, t, dU, dP);
-                dPf_.boundaryFieldRef()[patchi][facei] = dP;
-                ++ipf;
-            }
-        }
-    }
-
+    // One line for the points where a wave model was used outside its guard
+    Info<< "SWENSE drift: " << driftCount
+        << " points used outside the guard, worst |z - eta| = "
+        << driftWorstZ << " m at " << driftWorstX << endl;
 }
 
 // ************************************************************************* //
-
-
-// psiWf = pW(face)/rho_w (absolute, diagnostic only since the absolute-pressure change)
-Foam::scalar Foam::swenseIncident::psiWValue(const label ip, const scalar t) const
-{
-    const scalar pw = fastEval_
-      ? rhoWater_*(pExPt_[ip] - magG_*(pts_[ip] - refPos_).z())
-      : waterP(pts_[ip], t);
-
-    // E2: absolute water psi, no surface subtraction. pWs_ and pAs_ are kept
-    // only for diagnostics; the force uses pfInc/rhoI (swenseUcEqn.H), not this value.
-    return pw/rhoWater_;
-}
