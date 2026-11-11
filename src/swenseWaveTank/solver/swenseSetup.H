@@ -349,6 +349,7 @@ mesh.setFluxRequired(psiProj.name());
 // Logging only: term budget switch and the raw-blend gradient of UInc (set in
 // swenseIncidentStep.H before the projection)
 const bool budgetOn = runTime.controlDict().lookupOrDefault<bool>("budgetTerms", false);
+const bool theoremOn = runTime.controlDict().lookupOrDefault<bool>("theoremLog", false);
 scalarField budgetRawGradMag(mesh.nCells(), 0.0);
 
 // Initial incident step (spec steps 1b to 1d) with the initial alphaI: the

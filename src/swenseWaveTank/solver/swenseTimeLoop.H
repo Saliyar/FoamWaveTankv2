@@ -53,6 +53,12 @@ while (runTime.run())
         }
     }
 
+    // Logging only: theorem residuals (switch theoremLog)
+    if (theoremOn)
+    {
+        #include "swenseTheorem.H"
+    }
+
     // Logging only: term budget of the Uc equation (switch budgetTerms)
     if (budgetOn)
     {
