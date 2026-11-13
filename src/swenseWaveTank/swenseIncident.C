@@ -136,6 +136,21 @@ Foam::swenseIncident::swenseIncident
     Tsoft_(swenseRamp::Tsoft(mesh.thisDb())),
     tNow_(0.0),
     delta_(blendThickness(mesh.thisDb())),
+    airFill_
+    (
+        mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
+            .lookupOrDefault<word>("airFill", word("air2air"))
+    ),
+    matchStart_
+    (
+        mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
+            .lookupOrDefault<scalar>("matchStart", 0.0)
+    ),
+    matchEnd_
+    (
+        mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
+            .lookupOrDefault<scalar>("matchEnd", 1.0)
+    ),
     guard_(0.0),
     rhoAir_(rhoAir.value()),
     magG_
@@ -173,6 +188,25 @@ Foam::swenseIncident::swenseIncident
 
     Info<< "SWENSE guard: delta = " << delta_ << " m, dz at interface = "
         << dzInterface << " m, guard d_g = " << guard_ << " m" << endl;
+
+    // Air velocity mode of the blend (airFill); layer limits in metres
+    if (airFill_ != "air2air" && airFill_ != "water" && airFill_ != "layer")
+    {
+        FatalIOErrorInFunction(wp)
+            << "airFill must be air2air, water or layer, not " << airFill_
+            << exit(FatalIOError);
+    }
+
+    if (airFill_ == "layer" && !(matchEnd_ > matchStart_))
+    {
+        FatalIOErrorInFunction(wp)
+            << "layer airFill needs matchEnd > matchStart, got "
+            << matchStart_ << " and " << matchEnd_
+            << exit(FatalIOError);
+    }
+
+    Info<< "SWENSE airFill: " << airFill_ << ", matchStart = " << matchStart_
+        << " m, matchEnd = " << matchEnd_ << " m" << endl;
 
     // The Grid2Grid soft start would be applied twice with the SWENSE ramp
     // (rampTsoft in waveProperties, applied once in swenseIncident). The
@@ -469,6 +503,34 @@ Foam::vector Foam::swenseIncident::airUP
 }
 
 
+Foam::vector Foam::swenseIncident::airVelocity
+(
+    const label ip,
+    const scalar t,
+    const vector& UAir
+) const
+{
+    if (airFill_ == "air2air")
+    {
+        return UAir;
+    }
+
+    if (airFill_ == "water")
+    {
+        return waterUAt(ip, t);
+    }
+
+    // layer: smoothstep s(t) between the water velocity below matchStart
+    // and the Air2Air velocity above matchEnd, zeta = z - eta
+    const scalar zeta = pts_[ip].z() - etaAt(ip, t);
+    const scalar tt =
+        min(max((zeta - matchStart_)/(matchEnd_ - matchStart_), scalar(0)), scalar(1));
+    const scalar s = 3.0*tt*tt - 2.0*tt*tt*tt;
+
+    return (1.0 - s)*waterUAt(ip, t) + s*UAir;
+}
+
+
 Foam::scalar Foam::swenseIncident::ramp(const scalar t) const
 {
     return swenseRamp::factor(Tsoft_, t);
@@ -568,7 +630,7 @@ void Foam::swenseIncident::blendCell
     if (useAir)
     {
         scalar pa = 0.0;
-        const vector Ua = airUP(ip, pa);
+        const vector Ua = airVelocity(ip, t, airUP(ip, pa));
         mI += (1.0 - gamma)*rhoAir_*Ua;
         p += (1.0 - gamma)*pa;
     }
@@ -605,7 +667,7 @@ Foam::vector Foam::swenseIncident::blendFace
     if (useAir)
     {
         scalar pa = 0.0;
-        u += (1.0 - Wf)*airUP(ip, pa);
+        u += (1.0 - Wf)*airVelocity(ip, t, airUP(ip, pa));
     }
 
     countDrift(ip, t, useWater, useAir);
@@ -762,6 +824,20 @@ void Foam::swenseIncident::blend(const volScalarField& alphaI)
         blendCell(celli, t, gamma[celli], Ui[celli], pi[celli]);
     }
 
+    // Logging only: largest |water velocity - air velocity handed to the
+    // blend| in cells with 0 < alphaI < 1 (no effect on the fields)
+    scalar gapMax = 0.0;
+
+    forAll(Ui, celli)
+    {
+        if (alphaI[celli] > 0 && alphaI[celli] < 1)
+        {
+            scalar pa = 0.0;
+            const vector Ua = airVelocity(celli, t, airUP(celli, pa));
+            gapMax = max(gapMax, mag(waterUAt(celli, t) - Ua));
+        }
+    }
+
     // Boundary values of the cell fields: same blend at the patch face
     // centres with the boundary value of gamma
     label ip = offCb_;
@@ -810,6 +886,9 @@ void Foam::swenseIncident::blend(const volScalarField& alphaI)
     Info<< "SWENSE drift: " << driftCount
         << " points used outside the guard, worst |z - eta| = "
         << driftWorstZ << " m at " << driftWorstX << endl;
+
+    Info<< "SWENSE gap: max|water - air handed to blend| in 0<alphaI<1 = "
+        << gapMax << endl;
 }
 
 // ************************************************************************* //

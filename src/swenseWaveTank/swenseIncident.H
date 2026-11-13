@@ -98,6 +98,14 @@ class swenseIncident
         //- Blending thickness delta (m)
         const scalar delta_;
 
+        //- Air velocity handed to the blend (airFill in waveProperties):
+        //  air2air (default, unchanged), water, or layer (smoothstep between
+        //  the water and Air2Air velocity over zeta = z - eta in
+        //  [matchStart, matchEnd] m)
+        const word airFill_;
+        const scalar matchStart_;
+        const scalar matchEnd_;
+
         //- Guard distance d_g = max(delta, 3 dz), dz = cell height at the
         //  interface (document Rev4, 16.3 rule 5)
         scalar guard_;
@@ -147,6 +155,15 @@ class swenseIncident
         //- Air velocity (mesh frame) and pressure at flat point ip, from the
         //  Air2Air tables (one evaluation for both)
         vector airUP(const label ip, scalar& p) const;
+
+        //- Air velocity handed to the blend at flat point ip, from the Air2Air
+        //  velocity UAir of airUP (returned unchanged for airFill air2air)
+        vector airVelocity
+        (
+            const label ip,
+            const scalar t,
+            const vector& UAir
+        ) const;
 
         //- Water velocity and absolute water pressure at flat point ip (the
         //  per-step Grid2Grid values when they are current)
