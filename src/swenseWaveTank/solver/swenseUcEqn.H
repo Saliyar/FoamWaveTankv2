@@ -42,13 +42,70 @@
     // mass flux
     const word convScheme("div(rhoPhi,Uc)");
 
-    const volVectorField incTerm
+    volVectorField incTerm
     (
         "incTerm",
         (fvc::ddt(rho, UI) - fvc::ddt(rhoI, UI))
       + (fvc::div(rhoPhi, UI, convScheme) - fvc::div(rhoPhiI, UI, convScheme))
       - (viscUI(muOf(alpha1)()) - viscUI(muOf(alphaI)()))
     );
+
+    // Limited closure (waveProperties limitedClosure, default off).
+    // lam = 0 in cells where max(rho,rhoI)/min(rho,rhoI) > 2, else 1;
+    // lamf = min of owner and neighbour (boundary: patch value of lam).
+    // With lam = 0 the incident residual is removed from the incident term
+    // and from the face flux, so U = UI + Uc obeys the plain momentum
+    // equation (p_rgh = pInc + pc - rhoI gh) with the operator of UI.
+    volScalarField lam
+    (
+        IOobject("lam", runTime.timeName(), mesh,
+            IOobject::NO_READ, IOobject::NO_WRITE),
+        mesh,
+        dimensionedScalar("lam", dimless, 1.0)
+    );
+
+    surfaceScalarField lamf
+    (
+        IOobject("lamf", runTime.timeName(), mesh,
+            IOobject::NO_READ, IOobject::NO_WRITE),
+        mesh,
+        dimensionedScalar("lamf", dimless, 1.0)
+    );
+
+    if (limitedClosure)
+    {
+        label nZero = 0;
+
+        forAll(lam, c)
+        {
+            const scalar rA = rho[c];
+            const scalar rB = rhoI[c];
+
+            if (max(rA, rB)/min(rA, rB) > 2)
+            {
+                lam[c] = 0.0;
+                ++nZero;
+            }
+        }
+
+        for (label f = 0; f < mesh.nInternalFaces(); ++f)
+        {
+            lamf[f] = min(lam[mesh.owner()[f]], lam[mesh.neighbour()[f]]);
+        }
+
+        forAll(lamf.boundaryField(), patchi)
+        {
+            lamf.boundaryFieldRef()[patchi] = lam.boundaryField()[patchi];
+        }
+
+        Info<< "SWENSE limitedClosure: lam = 0 cells " << nZero << endl;
+
+        incTerm += (1.0 - lam)*
+        (
+            fvc::ddt(rhoI, UI) + fvc::div(rhoPhiI, UI, convScheme)
+          - viscUI(muOf(alphaI)())
+        );
+    }
 
     // Logging only (not used by any solve): residual of the incident momentum
     //   rI = [ddt(rhoI UI) + div(rhoPhiI UI)]
@@ -86,6 +143,15 @@
 
     UcEqn.relax();
 
+    // Face term of the limited closure; exactly zero when limitedClosure is
+    // off, because lamf = 1 then
+    const surfaceScalarField faceLim
+    (
+        (1.0 - lamf)
+       *(fvc::snGrad(incident.pInc() - rhoI*gh) + ghf*fvc::snGrad(rhoI))
+       *mesh.magSf()
+    );
+
     if (pimple.momentumPredictor())
     {
         solve
@@ -95,6 +161,7 @@
             fvc::reconstruct
             (
                 (-ghf*fvc::snGrad(Drho) - fvc::snGrad(pc))*mesh.magSf()
+              - faceLim
             )
         );
     }

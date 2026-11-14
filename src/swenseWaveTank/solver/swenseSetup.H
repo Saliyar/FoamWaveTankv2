@@ -350,6 +350,12 @@ mesh.setFluxRequired(psiProj.name());
 // swenseIncidentStep.H before the projection)
 const bool budgetOn = runTime.controlDict().lookupOrDefault<bool>("budgetTerms", false);
 const bool theoremOn = runTime.controlDict().lookupOrDefault<bool>("theoremLog", false);
+
+// Limited closure of the incident residual in the Uc and pc equations
+// (waveProperties limitedClosure, default off)
+const bool limitedClosure =
+    mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
+        .lookupOrDefault<Switch>("limitedClosure", false);
 scalarField budgetRawGradMag(mesh.nCells(), 0.0);
 
 // Initial incident step (spec steps 1b to 1d) with the initial alphaI: the
