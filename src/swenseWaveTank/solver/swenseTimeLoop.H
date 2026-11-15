@@ -64,7 +64,11 @@ while (runTime.run())
                     // Swept mesh flux, incident points and relaxation weight
                     meshPhi = mesh.phi();
                     incident.movePoints();
-                    relax.update();
+                    // Switch e: weight frozen at its step-0 value
+                    if (!swenseNoWeightUpdate)
+                    {
+                        relax.update();
+                    }
                 }
             }
 
@@ -78,7 +82,7 @@ while (runTime.run())
             #include "swenseIncidentStep.H"
 
             // Complementary flux from the face velocity on the new mesh
-            if (mesh.changing() && correctPhi)
+            if (mesh.changing() && correctPhi && !swenseNoCorrectPhi)
             {
                 #include "swenseCorrectPhi.H"
             }

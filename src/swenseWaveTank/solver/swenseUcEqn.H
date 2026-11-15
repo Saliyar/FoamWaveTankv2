@@ -42,10 +42,30 @@
     // mass flux
     const word convScheme("div(rhoPhi,Uc)");
 
+    // Switch b: incident time derivative as a plain Euler difference of the
+    // cell content, without the moving-mesh volume factor V0/V
+    auto ddtTerm = [&]() -> tmp<volVectorField>
+    {
+        if (!swenseNoMeshDdtUc)
+        {
+            return fvc::ddt(rho, UI) - fvc::ddt(rhoI, UI);
+        }
+
+        return tmp<volVectorField>
+        (
+            new volVectorField
+            (
+                "ddtPlain",
+                ((rho - rhoI)*UI - (rho.oldTime() - rhoI.oldTime())*UI.oldTime())
+               /mesh.time().deltaT()
+            )
+        );
+    };
+
     volVectorField incTerm
     (
         "incTerm",
-        (fvc::ddt(rho, UI) - fvc::ddt(rhoI, UI))
+        ddtTerm()
       + (fvc::div(rhoPhi, UI, convScheme) - fvc::div(rhoPhiI, UI, convScheme))
       - (viscUI(muOf(alpha1)()) - viscUI(muOf(alphaI)()))
     );

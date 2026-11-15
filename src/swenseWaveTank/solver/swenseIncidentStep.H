@@ -39,10 +39,18 @@
             // Flux correction (1/rhoI_f) snGrad(psi) |Sf|
             const surfaceScalarField dPhiI("dPhiI", psiEqn.flux());
 
-            phiInc = phiRaw - dPhiI;
+            // Switch c: on a moved mesh the projection is skipped
+            if (swenseNoProjMesh && mesh.moving())
+            {
+                phiInc = phiRaw;
+            }
+            else
+            {
+                phiInc = phiRaw - dPhiI;
 
-            // Cell velocity: uI - (1/rhoI) R[snGrad(psi) |Sf|]
-            incident.UIncRW() -= fvc::reconstruct(dPhiI/rRhoIf)/rhoI;
+                // Cell velocity: uI - (1/rhoI) R[snGrad(psi) |Sf|]
+                incident.UIncRW() -= fvc::reconstruct(dPhiI/rRhoIf)/rhoI;
+            }
         }
     }
 

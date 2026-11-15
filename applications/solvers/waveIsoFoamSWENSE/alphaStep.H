@@ -11,7 +11,7 @@
 U == incident.UInc() + Uc;
 
 {
-    volScalarField SpI("SpI", fvc::div(phiIRel));
+    volScalarField SpI("SpI", fvc::div(swenseNoRelFlux ? phiInc : phiIRel));
     zeroField Su;
 
     alphaI = alphaI.oldTime();
@@ -22,7 +22,10 @@ U == incident.UInc() + Uc;
 }
 
 {
-    volScalarField Sp("Sp", fvc::div(phi));
+    // Absolute total flux for switch a (updated every step; unused otherwise)
+    phiAbsTot = phi + meshPhi;
+
+    volScalarField Sp("Sp", fvc::div(swenseNoRelFlux ? phiAbsTot : phi));
     zeroField Su;
 
     alpha1 = alpha1.oldTime();

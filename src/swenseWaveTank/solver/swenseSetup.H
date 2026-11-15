@@ -155,6 +155,42 @@ const bool correctPhi
     pimple.dict().lookupOrDefault<Switch>("correctPhi", false)
 );
 
+// Diagnostic switches for the moving-mesh terms (waveProperties keys, default
+// off: the normal solver path is unchanged). Used to find the term behind a
+// gauge difference against a static run.
+const dictionary& swenseSwitchDict =
+    mesh.thisDb().lookupObject<IOdictionary>("waveProperties");
+
+// a) alphaI and alpha1 transport with phiI and phi (absolute), not minus meshPhi
+const bool swenseNoRelFlux
+(
+    swenseSwitchDict.lookupOrDefault<Switch>("swenseNoRelFlux", false)
+);
+
+// b) Uc equation: incident time derivative without the moving-mesh volume factor
+const bool swenseNoMeshDdtUc
+(
+    swenseSwitchDict.lookupOrDefault<Switch>("swenseNoMeshDdtUc", false)
+);
+
+// c) incident projection skipped on a moved mesh (phiInc = phiRaw)
+const bool swenseNoProjMesh
+(
+    swenseSwitchDict.lookupOrDefault<Switch>("swenseNoProjMesh", false)
+);
+
+// d) correctPhi flux correction skipped after motion
+const bool swenseNoCorrectPhi
+(
+    swenseSwitchDict.lookupOrDefault<Switch>("swenseNoCorrectPhi", false)
+);
+
+// e) relaxation-weight update frozen at its step-0 value
+const bool swenseNoWeightUpdate
+(
+    swenseSwitchDict.lookupOrDefault<Switch>("swenseNoWeightUpdate", false)
+);
+
 // Advected incident volume fraction alphaI (document Section 14.2). Its
 // start value is the blend weight, and alpha starts equal to it (Theorem 1).
 // Copy of alpha1 so that alphaI has the same boundary types (swenseWaveAlpha
@@ -308,6 +344,15 @@ volScalarField pcCorr
     mesh,
     dimensionedScalar("pcCorr", pc.dimensions(), 0.0),
     pc.boundaryField().types()
+);
+
+// Absolute total flux phi + meshPhi, used by the alpha1 transport when
+// swenseNoRelFlux is on (updated at the start of alphaStep.H)
+surfaceScalarField phiAbsTot
+(
+    IOobject("phiAbsTot", runTime.timeName(), mesh,
+        IOobject::NO_READ, IOobject::NO_WRITE),
+    phi + meshPhi
 );
 
 // Complementary flux and incident flux
