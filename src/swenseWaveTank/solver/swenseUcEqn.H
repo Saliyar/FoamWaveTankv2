@@ -110,27 +110,30 @@
     // Logging only (not used by any solve): residual of the incident momentum
     //   rI = [ddt(rhoI UI) + div(rhoPhiI UI)]
     //      + R[(snGrad(pInc - rhoI gh) + ghf snGrad(rhoI)) |Sf|]
-    // written with the time directory (AUTO_WRITE)
-    const volVectorField rI
-    (
-        IOobject
+    // Computed and written only when waveProperties logIncidentResidual is on
+    // (default off), and only at normal write times.
+    if (logIncidentResidual && runTime.writeTime())
+    {
+        const volVectorField rI
         (
-            "rI",
-            runTime.timeName(),
-            mesh,
-            IOobject::NO_READ,
-            IOobject::AUTO_WRITE
-        ),
-        (fvc::ddt(rhoI, UI) + fvc::div(rhoPhiI, UI, convScheme))
-      + fvc::reconstruct
-        (
-            (fvc::snGrad(incident.pInc() - rhoI*gh) + ghf*fvc::snGrad(rhoI))
-           *mesh.magSf()
-        )
-    );
+            IOobject
+            (
+                "rI",
+                runTime.timeName(),
+                mesh,
+                IOobject::NO_READ,
+                IOobject::NO_WRITE
+            ),
+            (fvc::ddt(rhoI, UI) + fvc::div(rhoPhiI, UI, convScheme))
+          + fvc::reconstruct
+            (
+                (fvc::snGrad(incident.pInc() - rhoI*gh) + ghf*fvc::snGrad(rhoI))
+               *mesh.magSf()
+            )
+        );
 
-    // A local object is not written by the time loop: write it here
-    rI.write();
+        rI.write();
+    }
 
     fvVectorMatrix UcEqn
     (

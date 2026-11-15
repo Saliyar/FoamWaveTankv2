@@ -356,6 +356,12 @@ const bool theoremOn = runTime.controlDict().lookupOrDefault<bool>("theoremLog",
 const bool limitedClosure =
     mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
         .lookupOrDefault<Switch>("limitedClosure", false);
+
+// Write the incident residual rI at write times (waveProperties
+// logIncidentResidual, default off). Logging only.
+const bool logIncidentResidual =
+    mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
+        .lookupOrDefault<Switch>("logIncidentResidual", false);
 scalarField budgetRawGradMag(mesh.nCells(), 0.0);
 
 // Initial incident step (spec steps 1b to 1d) with the initial alphaI: the
