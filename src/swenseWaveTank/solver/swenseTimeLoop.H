@@ -22,24 +22,68 @@ while (runTime.run())
     // Grid2Grid record update for this time step (as waveFoam does), then
     // the water and air wave models and the relaxation target
     externalWave->step();
-    incident.evaluate(runTime.value());
 
-    alphaH.primitiveFieldRef() =
-        incident.blendAlpha(runTime.value()).primitiveField();
+    // Static mesh: the incident level is set once per time step, before the
+    // PIMPLE loop (unchanged order)
+    if (!mesh.dynamic())
+    {
+        incident.evaluate(runTime.value());
 
-    // Steps 1a and 2: both fractions by the same routine, with the fluxes
-    // and velocities of the previous level
-    #include "alphaStep.H"
+        alphaH.primitiveFieldRef() =
+            incident.blendAlpha(runTime.value()).primitiveField();
 
-    // Relaxation toward alphaH, densities, Drho
-    #include "swenseAlphaRelax.H"
+        // Steps 1a and 2: both fractions by the same routine, with the fluxes
+        // and velocities of the previous level
+        #include "alphaStep.H"
 
-    // Steps 1b to 1d: incident field of the new level
-    #include "swenseIncidentStep.H"
+        // Relaxation toward alphaH, densities, Drho
+        #include "swenseAlphaRelax.H"
+
+        // Steps 1b to 1d: incident field of the new level
+        #include "swenseIncidentStep.H"
+    }
 
     // Step 3: momentum (Uc) and pressure (pc)
     while (pimple.loop())
     {
+        // Moving mesh (dyn port): mesh update at the first outer corrector,
+        // and at each one when moveMeshOuterCorrectors is on (as waveIsoFoam).
+        // The incident level follows the mesh: geometry, then flux, then the
+        // incident steps of the new level.
+        if (mesh.dynamic() && (pimple.firstIter() || moveMeshOuterCorrectors))
+        {
+            mesh.update();
+
+            if (mesh.changing())
+            {
+                gh = (g & mesh.C()) - ghRef;
+                ghf = (g & mesh.Cf()) - ghRef;
+
+                if (mesh.moving())
+                {
+                    // Swept mesh flux, incident points and relaxation weight
+                    meshPhi = mesh.phi();
+                    incident.movePoints();
+                    relax.update();
+                }
+            }
+
+            incident.evaluate(runTime.value());
+
+            alphaH.primitiveFieldRef() =
+                incident.blendAlpha(runTime.value()).primitiveField();
+
+            #include "alphaStep.H"
+            #include "swenseAlphaRelax.H"
+            #include "swenseIncidentStep.H"
+
+            // Complementary flux from the face velocity on the new mesh
+            if (mesh.changing() && correctPhi)
+            {
+                #include "swenseCorrectPhi.H"
+            }
+        }
+
         #include "swenseUcEqn.H"
 
         while (pimple.correct())

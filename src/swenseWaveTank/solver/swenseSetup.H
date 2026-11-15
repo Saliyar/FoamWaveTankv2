@@ -100,14 +100,9 @@ const dimensionedScalar& rho2 = mixture.rho2();
 Info<< "Creating SWENSE incident fields\n" << endl;
 swenseIncident incident(mesh, externalWave(), rho1, rho2);
 
-// This revision (momentum_swense_Rev1, Part II) is for a fixed mesh: the
-// spec does not cover moving meshes
-if (mesh.dynamic())
-{
-    FatalErrorInFunction
-        << "The momentum-blend SWENSE (Rev1) is implemented for a static mesh"
-        << " only" << exit(FatalError);
-}
+// Moving meshes (dyn port, dyn_spec.md): a dynamic mesh runs the incident
+// step inside the PIMPLE loop, after mesh.update(). A static mesh keeps the
+// original order (see swenseTimeLoop.H).
 
 // Wave models at the start time: eta for the initial alphaI and alphaH, and
 // the water and air fields for the initial incident step at the end of this
@@ -152,6 +147,12 @@ const pointField points0(mesh.points());
 const bool moveMeshOuterCorrectors
 (
     pimple.dict().lookupOrDefault<Switch>("moveMeshOuterCorrectors", false)
+);
+
+// Flux correction after a mesh motion (swenseCorrectPhi.H), as waveIsoFoam
+const bool correctPhi
+(
+    pimple.dict().lookupOrDefault<Switch>("correctPhi", false)
 );
 
 // Advected incident volume fraction alphaI (document Section 14.2). Its
@@ -285,6 +286,29 @@ if (pc.needReference())
     p = incident.pInc() + pc + Drho*gh;
     p_rgh = p - rho*gh;
 }
+
+// Flux correction after a mesh motion (swenseCorrectPhi.H): the incident
+// divergence enters the source as in swensePcEqn.H; the face coefficient
+// of the last momentum solve is taken as 1 (identity), a first-order
+// approximation to be replaced by the rAUf of the last UcEqn.
+const bool includeDivUInc = true;
+
+surfaceScalarField rAUfPrev
+(
+    IOobject("rAUfPrev", runTime.timeName(), mesh,
+        IOobject::NO_READ, IOobject::NO_WRITE),
+    mesh,
+    dimensionedScalar("rAUfPrev", dimless, 1.0)
+);
+
+volScalarField pcCorr
+(
+    IOobject("pcCorr", runTime.timeName(), mesh,
+        IOobject::NO_READ, IOobject::NO_WRITE),
+    mesh,
+    dimensionedScalar("pcCorr", pc.dimensions(), 0.0),
+    pc.boundaryField().types()
+);
 
 // Complementary flux and incident flux
 // phiComp is read from the time directory when present (written by
