@@ -357,6 +357,12 @@ const bool limitedClosure =
     mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
         .lookupOrDefault<Switch>("limitedClosure", false);
 
+// Density-ratio cut of the limited closure: lam = 0 where
+// max(rho,rhoI)/min(rho,rhoI) > limitedClosureRatio (default 2)
+const scalar limitedClosureRatio =
+    mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
+        .lookupOrDefault<scalar>("limitedClosureRatio", 2.0);
+
 // Write the incident residual rI at write times (waveProperties
 // logIncidentResidual, default off). Logging only.
 const bool logIncidentResidual =

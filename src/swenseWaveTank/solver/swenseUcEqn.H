@@ -81,7 +81,7 @@
             const scalar rA = rho[c];
             const scalar rB = rhoI[c];
 
-            if (max(rA, rB)/min(rA, rB) > 2)
+            if (max(rA, rB)/min(rA, rB) > limitedClosureRatio)
             {
                 lam[c] = 0.0;
                 ++nZero;
