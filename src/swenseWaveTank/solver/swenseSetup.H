@@ -323,10 +323,11 @@ if (pc.needReference())
     p_rgh = p - rho*gh;
 }
 
-// Flux correction after a mesh motion (swenseCorrectPhi.H): the incident
-// divergence enters the source as in swensePcEqn.H; the face coefficient
-// of the last momentum solve is taken as 1 (identity), a first-order
-// approximation to be replaced by the rAUf of the last UcEqn.
+// Flux correction after a mesh motion (swenseCorrectPhi.H): the target is
+// div(phiComp + phiInc) = 0. The face coefficient is the rAUf of the last
+// pc solve (set at the end of swensePcEqn.H), as interFoam's correctPhi.H
+// uses fvc::interpolate(rAU()); before the first pc solve it is 1 with the
+// dimensions of 1/A, as interFoam's initCorrectPhi.H.
 const bool includeDivUInc = true;
 
 surfaceScalarField rAUfPrev
@@ -334,7 +335,7 @@ surfaceScalarField rAUfPrev
     IOobject("rAUfPrev", runTime.timeName(), mesh,
         IOobject::NO_READ, IOobject::NO_WRITE),
     mesh,
-    dimensionedScalar("rAUfPrev", dimless, 1.0)
+    dimensionedScalar("rAUfPrev", dimTime/rho.dimensions(), 1.0)
 );
 
 volScalarField pcCorr

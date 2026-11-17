@@ -75,6 +75,10 @@
         Ucf += n*(phiComp/mesh.magSf() - (n & Ucf));
     }
 
+    // Face coefficient for the flux correction after the next mesh motion
+    // (swenseCorrectPhi.H); read nowhere else, so the static path is unchanged
+    rAUfPrev = rAUf;
+
     // Total fields (Section 12.4)
     phi == phiComp + phiInc - meshPhi;
     #include "continuityErrs.H"
