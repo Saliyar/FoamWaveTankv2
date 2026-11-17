@@ -15,7 +15,8 @@ swenseBodyVelocityFvPatchVectorField
     const DimensionedField<vector, volMesh>& iF
 )
 :
-    fixedValueFvPatchVectorField(p, iF)
+    fixedValueFvPatchVectorField(p, iF),
+    exactWallFlux_(false)
 {}
 
 
@@ -27,7 +28,8 @@ swenseBodyVelocityFvPatchVectorField
     const dictionary& dict
 )
 :
-    fixedValueFvPatchVectorField(p, iF, dict)
+    fixedValueFvPatchVectorField(p, iF, dict),
+    exactWallFlux_(dict.getOrDefault<Switch>("exactWallFlux", false))
 {}
 
 
@@ -40,7 +42,8 @@ swenseBodyVelocityFvPatchVectorField
     const fvPatchFieldMapper& mapper
 )
 :
-    fixedValueFvPatchVectorField(ptf, p, iF, mapper)
+    fixedValueFvPatchVectorField(ptf, p, iF, mapper),
+    exactWallFlux_(ptf.exactWallFlux_)
 {}
 
 
@@ -50,7 +53,8 @@ swenseBodyVelocityFvPatchVectorField
     const swenseBodyVelocityFvPatchVectorField& ptf
 )
 :
-    fixedValueFvPatchVectorField(ptf)
+    fixedValueFvPatchVectorField(ptf),
+    exactWallFlux_(ptf.exactWallFlux_)
 {}
 
 
@@ -61,7 +65,8 @@ swenseBodyVelocityFvPatchVectorField
     const DimensionedField<vector, volMesh>& iF
 )
 :
-    fixedValueFvPatchVectorField(ptf, iF)
+    fixedValueFvPatchVectorField(ptf, iF),
+    exactWallFlux_(ptf.exactWallFlux_)
 {}
 
 
@@ -88,7 +93,12 @@ void Foam::swenseBodyVelocityFvPatchVectorField::updateCoeffs()
     // face centre motion, (Cf - Cf_old)/dt, and the normal part replaced by
     // meshPhi/magSf. The total U on the body is this wall velocity, so
     // Uc = Uwall - UInc.
-    vectorField Uwall(patch().size(), Zero);
+    const vectorField n(patch().nf());
+    const scalarField& magSf = patch().magSf();
+    const vectorField& UIb = UInc.boundaryField()[patchi];
+
+    // Face-centre velocity of the wall, zero on a static mesh
+    vectorField Up(patch().size(), Zero);
 
     if (patch().boundaryMesh().mesh().moving())
     {
@@ -103,19 +113,48 @@ void Foam::swenseBodyVelocityFvPatchVectorField::updateCoeffs()
         }
 
         const scalar deltaT = mesh.time().deltaTValue();
-        const vectorField Up((pp.faceCentres() - oldFc)/deltaT);
-
-        const vectorField n(patch().nf());
-        const scalarField& magSf = patch().magSf();
-        const scalarField Un
-        (
-            meshPhi.boundaryField()[patchi]/(magSf + VSMALL)
-        );
-
-        Uwall = Up + n*(Un - (n & Up));
+        Up = (pp.faceCentres() - oldFc)/deltaT;
     }
 
-    operator==(Uwall - UInc.boundaryField()[patchi]);
+    vectorField Ucb(patch().size(), Zero);
+
+    if (exactWallFlux_ && db().foundObject<surfaceScalarField>("phiInc"))
+    {
+        // Option exactWallFlux: normal part (meshPhi - phiInc)/|Sf|, so that
+        // phiComp + phiInc = meshPhi on the patch (phiComp_b = Uc_b . Sf
+        // through constrainPressure); tangential part of Uwall - UInc. With
+        // phiInc = UInc = 0 this is Uwall term by term.
+        const surfaceScalarField& phiInc =
+            db().lookupObject<surfaceScalarField>("phiInc");
+
+        const scalarField Unc
+        (
+            (meshPhi.boundaryField()[patchi] - phiInc.boundaryField()[patchi])
+           /(magSf + VSMALL)
+        );
+
+        Ucb = Up + n*(Unc - (n & Up));
+        Ucb -= (UIb - n*(n & UIb));
+    }
+    else
+    {
+        // Off (default): Uc = Uwall - UInc. The relative wall flux is then
+        // (UfInc - UInc).Sf, the normal part of the incident projection
+        // correction of the wall cell (zero without an incident field).
+        if (patch().boundaryMesh().mesh().moving())
+        {
+            const scalarField Un
+            (
+                meshPhi.boundaryField()[patchi]/(magSf + VSMALL)
+            );
+
+            Ucb = Up + n*(Un - (n & Up));
+        }
+
+        Ucb = Ucb - UIb;
+    }
+
+    operator==(Ucb);
 
     fixedValueFvPatchVectorField::updateCoeffs();
 }
@@ -124,6 +163,7 @@ void Foam::swenseBodyVelocityFvPatchVectorField::updateCoeffs()
 void Foam::swenseBodyVelocityFvPatchVectorField::write(Ostream& os) const
 {
     fixedValueFvPatchVectorField::write(os);
+    os.writeEntryIfDifferent<Switch>("exactWallFlux", false, exactWallFlux_);
 }
 
 

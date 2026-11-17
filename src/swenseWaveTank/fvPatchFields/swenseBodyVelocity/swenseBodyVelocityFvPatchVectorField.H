@@ -3,9 +3,18 @@ Class
     Foam::swenseBodyVelocityFvPatchVectorField
 Description
     Velocity boundary condition for a body in the SWENSE solver (fixed value).
-    The value is -UInc on the patch, so that the total velocity U = Uc + UInc
-    is zero on the body (no-slip for the total field). UInc is the registered
+    Uc = Uwall - UInc on the patch, with Uwall the wall velocity as
+    movingWallVelocity builds it (zero on a static mesh), so that the total
+    velocity U = Uc + UInc is the wall velocity. UInc is the registered
     incident velocity field of the SWENSE solver, evaluated on the patch.
+
+    Optional entry exactWallFlux (default off). When on, the normal part of
+    Uc is replaced by (meshPhi - phiInc)/|Sf| with the registered incident
+    flux phiInc, so that phiComp + phiInc = meshPhi on the patch exactly (no
+    flux through the body relative to its motion). The tangential part is
+    unchanged. Off, the relative wall flux is (UfInc - UInc).Sf, the normal
+    part of the incident projection correction of the wall cell.
+
 SourceFiles
     swenseBodyVelocityFvPatchVectorField.C
 \*---------------------------------------------------------------------------*/
@@ -28,6 +37,11 @@ class swenseBodyVelocityFvPatchVectorField
 :
     public fixedValueFvPatchVectorField
 {
+    // Private data
+
+        //- Normal part from meshPhi - phiInc (default off)
+        Switch exactWallFlux_;
+
 
 public:
 
@@ -98,7 +112,7 @@ public:
 
     // Member functions
 
-        //- Update the coefficients: value = -UInc on the patch
+        //- Update the coefficients: value = Uwall - UInc on the patch
         virtual void updateCoeffs();
 
         //- Write
