@@ -48,8 +48,9 @@ while (runTime.run())
     {
         // Moving mesh (dyn port): mesh update at the first outer corrector,
         // and at each one when moveMeshOuterCorrectors is on (as waveIsoFoam).
-        // The incident level follows the mesh: geometry, then flux, then the
-        // incident steps of the new level.
+        // The incident level follows the mesh: geometry, then the flux
+        // correction on the new mesh, then the incident steps of the new
+        // level (the order of waveIsoFoam.C:152-174).
         if (mesh.dynamic() && (pimple.firstIter() || moveMeshOuterCorrectors))
         {
             mesh.update();
@@ -72,6 +73,16 @@ while (runTime.run())
                 }
             }
 
+            // Order as waveIsoFoam.C:152-174: flux correction on the new mesh
+            // first (with the incident flux of level n), then both fractions
+            // moved with fluxes relative to the new mesh motion.
+            if (mesh.changing() && correctPhi && !swenseNoCorrectPhi)
+            {
+                #include "swenseCorrectPhi.H"
+            }
+            phi = phiComp + phiInc - meshPhi;
+            phiIRel = phiInc - meshPhi;
+
             incident.evaluate(runTime.value());
 
             alphaH.primitiveFieldRef() =
@@ -81,11 +92,9 @@ while (runTime.run())
             #include "swenseAlphaRelax.H"
             #include "swenseIncidentStep.H"
 
-            // Complementary flux from the face velocity on the new mesh
-            if (mesh.changing() && correctPhi && !swenseNoCorrectPhi)
-            {
-                #include "swenseCorrectPhi.H"
-            }
+            // Relative total flux with the incident flux of the new level
+            // (as the last line of swenseCorrectPhi.H does)
+            phi = phiComp + phiInc - meshPhi;
         }
 
         #include "swenseUcEqn.H"
