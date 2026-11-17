@@ -433,6 +433,20 @@ const scalar limitedClosureRatio =
     mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
         .lookupOrDefault<scalar>("limitedClosureRatio", 2.0);
 
+// Continuous limited closure (waveProperties limitedClosureContinuous,
+// default off): lam = 1 - |alpha1 - alphaI| instead of the 0/1 cut, i.e.
+// the share of the incident residual kept is the mismatched mass
+// |rho - rhoI|/(rho1 - rho2). lam = 1 where alpha1 = alphaI (residual
+// dropped, invariance kept), lam = 0 where the phases are swapped (residual
+// kept, total equation exact there). No free parameter, and linear in the
+// fields, so no step switches the O(rho g dz/d) interface residual on or off.
+// (A density-ratio form min(rho,rhoI)/max(rho,rhoI) was tried first and
+// rejected: 1% of water in an incident-air cell already gives lam = 0.1.)
+// limitedClosureRatio is not used in this mode.
+const bool limitedClosureContinuous =
+    mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
+        .lookupOrDefault<Switch>("limitedClosureContinuous", false);
+
 // Write the incident residual rI at write times (waveProperties
 // logIncidentResidual, default off). Logging only.
 const bool logIncidentResidual =

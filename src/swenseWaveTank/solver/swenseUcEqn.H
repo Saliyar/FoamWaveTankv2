@@ -101,7 +101,27 @@
             const scalar rA = rho[c];
             const scalar rB = rhoI[c];
 
-            if (max(rA, rB)/min(rA, rB) > limitedClosureRatio)
+            if (limitedClosureContinuous)
+            {
+                // Continuous closure, linear in the mismatched mass:
+                // 1 - lam = |rho - rhoI|/(rho1 - rho2) = |alpha1 - alphaI|.
+                // nZero counts the cells with lam < 0.5
+                lam[c] = 1.0 - min
+                (
+                    mag
+                    (
+                        min(max(alpha1[c], scalar(0)), scalar(1))
+                      - min(max(alphaI[c], scalar(0)), scalar(1))
+                    ),
+                    scalar(1)
+                );
+
+                if (lam[c] < 0.5)
+                {
+                    ++nZero;
+                }
+            }
+            else if (max(rA, rB)/min(rA, rB) > limitedClosureRatio)
             {
                 lam[c] = 0.0;
                 ++nZero;
