@@ -240,8 +240,39 @@
             incident.phaseJumpP() - (rho1 - rho2)*gh
         );
 
+        // Share of the face where the fluid follows the incident:
+        // mJ_f = 1 - max over owner and neighbour of |alpha1 - alphaI|
+        // (boundary: the owner cell). The jump is a discretisation term of
+        // the incident only where alpha1 = alphaI; where the phases differ
+        // it is part of the plain hydrostatic balance and is kept
+        const volScalarField misJ
+        (
+            "misJ",
+            min(mag(min(max(alpha1, scalar(0)), scalar(1)) - gammaJ), scalar(1))
+        );
+
+        surfaceScalarField mJ
+        (
+            IOobject("mJ", runTime.timeName(), mesh,
+                IOobject::NO_READ, IOobject::NO_WRITE),
+            mesh,
+            dimensionedScalar("mJ", dimless, 1.0)
+        );
+
+        for (label f = 0; f < mesh.nInternalFaces(); ++f)
+        {
+            mJ[f] = 1.0
+              - max(misJ[mesh.owner()[f]], misJ[mesh.neighbour()[f]]);
+        }
+
+        forAll(mJ.boundaryField(), patchi)
+        {
+            mJ.boundaryFieldRef()[patchi] =
+                1.0 - misJ.boundaryField()[patchi].patchInternalField();
+        }
+
         incFace -=
-            fvc::snGrad(gammaJ)
+            mJ*fvc::snGrad(gammaJ)
            *(linearInterpolate(PJ) + (rho1 - rho2)*ghf);
     }
 
