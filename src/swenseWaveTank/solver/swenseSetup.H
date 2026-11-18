@@ -447,31 +447,6 @@ const bool limitedClosureContinuous =
     mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
         .lookupOrDefault<Switch>("limitedClosureContinuous", false);
 
-// Jump-free closure face term (waveProperties limitedClosureJump, default
-// off; Phase C6 derivation in floating/phaseC.md). With gamma = alphaI in
-// [0, 1], P_W = pW - rho1 gh, P_A = pA - rho2 gh, the incident face term of
-// the closure is exactly
-//   snGrad(pInc - rhoI gh) + ghf snGrad(rhoI)
-//     = [mean(gamma) dP_W + (1 - mean(gamma)) dP_A]/d
-//     + snGrad(gamma) [mean(P_W - P_A) + (rho1 - rho2) ghf].
-// The second line is the pressure jump of the two wave models, pW - pA,
-// at the face where alphaI jumps; the exact incident jumps only at eta,
-// where pW = pA, so it is a discretisation term of the alphaI interface
-// (O(rho1 g (eta - z_f)/d)). On: it is removed from the closure face term.
-// Only lam_f < 1 faces see it, so pure waves without lam = 0 cells are
-// unchanged bit for bit. Off: nothing changes.
-const bool limitedClosureJump =
-    mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
-        .lookupOrDefault<Switch>("limitedClosureJump", false);
-
-if (limitedClosureJump && !limitedClosure)
-{
-    FatalErrorInFunction
-        << "limitedClosureJump needs limitedClosure on" << exit(FatalError);
-}
-
-Info<< "SWENSE limitedClosureJump " << limitedClosureJump << endl;
-
 // Plain closure in a body zone (waveProperties plainBodyZone, default none):
 // the name of a cellZone (made in the case, e.g. with topoSet, from the cells
 // that the body motion can move). lam = 0 in every zone cell, so lam_f = 0 on

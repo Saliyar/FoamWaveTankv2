@@ -739,49 +739,6 @@ void Foam::swenseIncident::movePoints()
 }
 
 
-Foam::tmp<Foam::volScalarField> Foam::swenseIncident::phaseJumpP() const
-{
-    const scalar t = tNow_;
-
-    tmp<volScalarField> tJ
-    (
-        new volScalarField
-        (
-            IOobject("pJumpInc", mesh_.time().timeName(), mesh_,
-                IOobject::NO_READ, IOobject::NO_WRITE),
-            mesh_,
-            dimensionedScalar("pJumpInc", dimPressure, 0.0)
-        )
-    );
-    volScalarField& J = tJ.ref();
-
-    forAll(J, celli)
-    {
-        scalar pa = 0.0;
-        airUP(celli, pa);
-        J[celli] = waterPAt(celli, t) - pa;
-    }
-
-    // Boundary: the patch face centres, in the order of blend()
-    label ip = offCb_;
-
-    forAll(J.boundaryField(), patchi)
-    {
-        scalarField& Jb = J.boundaryFieldRef()[patchi];
-
-        forAll(Jb, facei)
-        {
-            scalar pa = 0.0;
-            airUP(ip, pa);
-            Jb[facei] = waterPAt(ip, t) - pa;
-            ++ip;
-        }
-    }
-
-    return tJ;
-}
-
-
 void Foam::swenseIncident::evaluate(const scalar t)
 {
     // Grid2Grid time is t + referenceTime; Air2Air uses the same time
