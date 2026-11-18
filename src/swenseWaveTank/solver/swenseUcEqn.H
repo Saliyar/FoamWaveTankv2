@@ -217,11 +217,37 @@
         tpIncClosure = incident.pInc() - deltaHeld;
     }
 
+    surfaceScalarField incFace
+    (
+        "incFace",
+        fvc::snGrad(tpIncClosure() - rhoI*gh) + ghf*fvc::snGrad(rhoI)
+    );
+
+    // limitedClosureJump (default off): remove the jump of the two wave
+    // models at the alphaI interface, snGrad(gamma) [mean(P_W - P_A)
+    // + (rho1 - rho2) ghf] (swenseSetup.H)
+    if (limitedClosureJump)
+    {
+        const volScalarField gammaJ
+        (
+            "gammaJ",
+            min(max(alphaI, scalar(0)), scalar(1))
+        );
+
+        const volScalarField PJ
+        (
+            "PJ",
+            incident.phaseJumpP() - (rho1 - rho2)*gh
+        );
+
+        incFace -=
+            fvc::snGrad(gammaJ)
+           *(linearInterpolate(PJ) + (rho1 - rho2)*ghf);
+    }
+
     const surfaceScalarField faceLim
     (
-        (1.0 - lamf)
-       *(fvc::snGrad(tpIncClosure() - rhoI*gh) + ghf*fvc::snGrad(rhoI))
-       *mesh.magSf()
+        (1.0 - lamf)*incFace*mesh.magSf()
     );
 
     if (pimple.momentumPredictor())

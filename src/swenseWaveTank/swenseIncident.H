@@ -269,6 +269,13 @@ public:
         //  Air2Air objects are not modified.
         void movePoints();
 
+        //- Pressure jump of the two wave models, pW - pA, at the cell
+        //  centres (boundary: patch face centres), at the time of the last
+        //  evaluate(). Both models are evaluated in every cell (the water
+        //  model above eta and the air model below eta are their smooth
+        //  continuations). Used by limitedClosureJump (swenseUcEqn.H).
+        tmp<volScalarField> phaseJumpP() const;
+
         //- Accessors
         const volVectorField& UInc() const { return UInc_; }
         //  Non-const access for the isoAdvector of alphaI, which holds a
