@@ -72,7 +72,7 @@
 
     // Limited closure (waveProperties limitedClosure, default off).
     // lam = 0 in cells where max(rho,rhoI)/min(rho,rhoI) > 2, else 1;
-    // lamf = min of owner and neighbour (boundary: patch value of lam).
+    // lamf = min of owner and neighbour (boundary: lam of the owner cell).
     // With lam = 0 the incident residual is removed from the incident term
     // and from the face flux, so U = UI + Uc obeys the plain momentum
     // equation (p_rgh = pInc + pc - rhoI gh) with the operator of UI.
@@ -149,9 +149,12 @@
             lamf[f] = min(lam[mesh.owner()[f]], lam[mesh.neighbour()[f]]);
         }
 
+        // Boundary lam_f = lam of the owner cell (the patch value of lam is
+        // never set and stayed 1)
         forAll(lamf.boundaryField(), patchi)
         {
-            lamf.boundaryFieldRef()[patchi] = lam.boundaryField()[patchi];
+            lamf.boundaryFieldRef()[patchi] =
+                lam.boundaryField()[patchi].patchInternalField();
         }
 
         Info<< "SWENSE limitedClosure: lam = 0 cells " << nZero << endl;
