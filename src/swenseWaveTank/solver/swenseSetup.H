@@ -466,9 +466,52 @@ const bool incidentPressureBalance =
     mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
         .lookupOrDefault<Switch>("incidentPressureBalance", false);
 
+// deltaHeld boundary types: the constraint type on constraint patches
+// (empty), fixedValue 0 where pc fixes its value, fixed gradient elsewhere
+// (gradient set before each solve so that the boundary flux of
+// Phi[r_I] - rAUf snGrad(deltaHeld) |Sf| is zero, as fixedFluxPressure)
+wordList deltaHeldTypes
+(
+    pc.boundaryField().size(),
+    fixedGradientFvPatchScalarField::typeName
+);
+
+forAll(pc.boundaryField(), patchi)
+{
+    const word& ptype = mesh.boundaryMesh()[patchi].type();
+
+    if (polyPatch::constraintType(ptype))
+    {
+        deltaHeldTypes[patchi] = ptype;
+    }
+    else if (pc.boundaryField()[patchi].fixesValue())
+    {
+        deltaHeldTypes[patchi] = fixedValueFvPatchScalarField::typeName;
+    }
+}
+
+volScalarField deltaHeld
+(
+    IOobject
+    (
+        "deltaHeld",
+        runTime.timeName(),
+        mesh,
+        IOobject::NO_READ,
+        incidentPressureBalance ? IOobject::AUTO_WRITE : IOobject::NO_WRITE
+    ),
+    mesh,
+    dimensionedScalar("deltaHeld", pc.dimensions(), 0.0),
+    deltaHeldTypes
+);
+
 if (incidentPressureBalance)
 {
-    Info<< "SWENSE incidentPressureBalance on" << endl;
+    // V2 takes the face flux of the deltaHeld equation
+    mesh.setFluxRequired(deltaHeld.name());
+
+    Info<< "SWENSE incidentPressureBalance on; deltaHeld boundary types "
+        << deltaHeldTypes << endl;
 }
 
 scalarField budgetRawGradMag(mesh.nCells(), 0.0);

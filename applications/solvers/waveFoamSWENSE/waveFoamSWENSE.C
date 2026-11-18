@@ -27,6 +27,7 @@ Description
 #include "adjustPhi.H"
 #include "constrainHbyA.H"
 #include "constrainPressure.H"
+#include "fixedGradientFvPatchFields.H"
 #include "swenseIncident.H"
 #include "swenseRelaxation.H"
 #include "swenseVoFAdvection.H"

@@ -90,6 +90,7 @@
     if (balanceNow)
     {
         #include "swenseBalanceFlux.H"
+        #include "swenseBalanceSolve.H"
     }
 
     // Total fields (Section 12.4)
