@@ -98,6 +98,17 @@
     #include "continuityErrs.H"
 
     U == Uc + incident.UInc();
-    p == incident.pInc() + pc + Drho*gh;
+
+    if (balanceNow)
+    {
+        // V3: p with the held incident pressure pIncHeld = pInc - deltaHeld;
+        // forces, sixDoF and output read this p
+        p == incident.pInc() - deltaHeld + pc + Drho*gh;
+    }
+    else
+    {
+        p == incident.pInc() + pc + Drho*gh;
+    }
+
     p_rgh == p - rho*gh;
 }
