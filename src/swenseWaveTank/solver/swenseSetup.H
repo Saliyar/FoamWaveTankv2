@@ -482,6 +482,14 @@ if (plainBodyZoneName != "none")
         << " cells with lam = 0" << endl;
 }
 
+// Column level correction of the incident surface (controlDict
+// levelCorrection, default off; swenseColumnLevel.H, called after the
+// relaxation in swenseAlphaRelax.H). With plainBodyZone or a moving mesh it
+// is allowed only in columns wholly outside the zone (checked at set-up).
+const bool levelCorrection =
+    runTime.controlDict().lookupOrDefault<bool>("levelCorrection", false);
+Info<< "SWENSE levelCorrection " << levelCorrection << endl;
+
 // Write the incident residual rI at write times (waveProperties
 // logIncidentResidual, default off). Logging only.
 const bool logIncidentResidual =

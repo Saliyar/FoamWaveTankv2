@@ -258,6 +258,63 @@ if (colInit)
             << endl;
     }
 
+    // Body zone rule. The column tables are built once from the initial
+    // mesh and are valid only where no mesh point moves. plainBodyZone holds
+    // the cells that touch the moving points, so every corrected column must
+    // lie wholly outside it: a corrected column with a cell in the zone stops
+    // the run (remove such columns with levelCorrectionSkipMin/Max). On a
+    // moving mesh the zone is required, since it is what this check uses.
+    if (mesh.dynamic() || plainBodyZoneID >= 0)
+    {
+        if (plainBodyZoneID < 0)
+        {
+            FatalErrorInFunction
+                << "level correction on a moving mesh (" << mesh.type()
+                << ") needs waveProperties plainBodyZone: corrected columns"
+                << " must lie wholly outside the cells that touch moving points"
+                << exit(FatalError);
+        }
+
+        boolList inZone(mesh.nCells(), false);
+        for (const label c : mesh.cellZones()[plainBodyZoneID])
+        {
+            inZone[c] = true;
+        }
+        labelList colInZone(nCol, 0);
+        forAll(colOfCell, c)
+        {
+            if (colOfCell[c] >= 0 && inZone[c])
+            {
+                colInZone[colOfCell[c]] = 1;
+            }
+        }
+        label nBad = 0;
+        scalar xBad = -GREAT;
+        forAll(colInZone, col)
+        {
+            if (colInZone[col])
+            {
+                nBad++;
+                xBad = max(xBad, colXY[col].x());
+            }
+        }
+        reduce(nBad, sumOp<label>());
+        reduce(xBad, maxOp<scalar>());
+        if (nBad)
+        {
+            FatalErrorInFunction
+                << nBad << " corrected column(s) have cells in plainBodyZone "
+                << mesh.cellZones()[plainBodyZoneID].name()
+                << " (largest x " << xBad << "); the level correction is"
+                << " allowed only in columns wholly outside the zone. Set"
+                << " levelCorrectionSkipMin/Max to cover the zone columns."
+                << exit(FatalError);
+        }
+        Info<< "level correction: no corrected column has a cell in"
+            << " plainBodyZone " << mesh.cellZones()[plainBodyZoneID].name()
+            << endl;
+    }
+
     colKeyList = stringList(colKeyL);
 
     colX.setSize(nCol);
