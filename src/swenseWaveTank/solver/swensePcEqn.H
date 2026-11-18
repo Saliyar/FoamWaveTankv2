@@ -79,6 +79,19 @@
     // (swenseCorrectPhi.H); read nowhere else, so the static path is unchanged
     rAUfPrev = rAUf;
 
+    // Incident pressure balance (incidentPressureBalance, default off;
+    // momentum_swense Part V): after the last corrector of the step, the flux
+    // of r_I (V1), the correction deltaHeld (V2) and the log (V5)
+    const bool balanceNow =
+        incidentPressureBalance
+     && pimple.finalIter()
+     && pimple.corrPISO() == pimple.nCorrPISO();
+
+    if (balanceNow)
+    {
+        #include "swenseBalanceFlux.H"
+    }
+
     // Total fields (Section 12.4)
     phi == phiComp + phiInc - meshPhi;
     #include "continuityErrs.H"

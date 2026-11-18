@@ -452,6 +452,25 @@ const bool limitedClosureContinuous =
 const bool logIncidentResidual =
     mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
         .lookupOrDefault<Switch>("logIncidentResidual", false);
+
+// Incident pressure balance (waveProperties incidentPressureBalance, default
+// off; momentum_swense Part V, items V1 to V5). After the last pressure
+// corrector of a step the flux of the incident residual r_I is balanced by a
+// pressure correction deltaHeld:
+//   laplacian(rAUf, deltaHeld) = div(Phi[r_I]),  pIncHeld = pInc - deltaHeld
+// (swenseBalanceFlux.H, swenseBalanceSolve.H). p is rebuilt with pIncHeld
+// (swensePcEqn.H), the closure face term of the next step uses pIncHeld
+// (swenseUcEqn.H), and swenseBalanceLog.H logs the result. Off: nothing is
+// built, solved or changed.
+const bool incidentPressureBalance =
+    mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
+        .lookupOrDefault<Switch>("incidentPressureBalance", false);
+
+if (incidentPressureBalance)
+{
+    Info<< "SWENSE incidentPressureBalance on" << endl;
+}
+
 scalarField budgetRawGradMag(mesh.nCells(), 0.0);
 
 // Initial incident step (spec steps 1b to 1d) with the initial alphaI: the
