@@ -187,11 +187,21 @@
     UcEqn.relax();
 
     // Face term of the limited closure; exactly zero when limitedClosure is
-    // off, because lamf = 1 then
+    // off, because lamf = 1 then. V4 of the incident pressure balance
+    // (incidentPressureBalance on): r_I is built with the held incident
+    // pressure pIncHeld = pInc - deltaHeld, deltaHeld of the previous step
+    // (zero before the first balance). Off: pInc itself, unchanged.
+    tmp<volScalarField> tpIncClosure(incident.pInc());
+
+    if (incidentPressureBalance)
+    {
+        tpIncClosure = incident.pInc() - deltaHeld;
+    }
+
     const surfaceScalarField faceLim
     (
         (1.0 - lamf)
-       *(fvc::snGrad(incident.pInc() - rhoI*gh) + ghf*fvc::snGrad(rhoI))
+       *(fvc::snGrad(tpIncClosure() - rhoI*gh) + ghf*fvc::snGrad(rhoI))
        *mesh.magSf()
     );
 
