@@ -91,6 +91,7 @@
     {
         #include "swenseBalanceFlux.H"
         #include "swenseBalanceSolve.H"
+        #include "swenseBalanceLog.H"
     }
 
     // Total fields (Section 12.4)

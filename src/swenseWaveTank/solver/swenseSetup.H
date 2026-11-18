@@ -505,13 +505,25 @@ volScalarField deltaHeld
     deltaHeldTypes
 );
 
+// Body patches (Uc of type swenseBodyVelocity), for the logged integral of
+// deltaHeld n dS
+DynamicList<label> bodyPatchList;
+forAll(Uc.boundaryField(), patchi)
+{
+    if (Uc.boundaryField()[patchi].type() == "swenseBodyVelocity")
+    {
+        bodyPatchList.append(patchi);
+    }
+}
+const labelList bodyPatches(bodyPatchList);
+
 if (incidentPressureBalance)
 {
     // V2 takes the face flux of the deltaHeld equation
     mesh.setFluxRequired(deltaHeld.name());
 
     Info<< "SWENSE incidentPressureBalance on; deltaHeld boundary types "
-        << deltaHeldTypes << endl;
+        << deltaHeldTypes << "; body patches " << bodyPatches << endl;
 }
 
 scalarField budgetRawGradMag(mesh.nCells(), 0.0);
