@@ -447,6 +447,41 @@ const bool limitedClosureContinuous =
     mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
         .lookupOrDefault<Switch>("limitedClosureContinuous", false);
 
+// Plain closure in a body zone (waveProperties plainBodyZone, default none):
+// the name of a cellZone (made in the case, e.g. with topoSet, from the cells
+// that the body motion can move). lam = 0 in every zone cell, so lam_f = 0 on
+// every face with the owner or the neighbour in the zone; outside the zone
+// lam is the limited closure as before. Needs limitedClosure on.
+const word plainBodyZoneName =
+    mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
+        .lookupOrDefault<word>("plainBodyZone", "none");
+
+label plainBodyZoneID = -1;
+
+if (plainBodyZoneName != "none")
+{
+    plainBodyZoneID = mesh.cellZones().findZoneID(plainBodyZoneName);
+
+    if (plainBodyZoneID < 0)
+    {
+        FatalErrorInFunction
+            << "plainBodyZone " << plainBodyZoneName
+            << " is not a cellZone of the mesh; cellZones: "
+            << mesh.cellZones().names() << exit(FatalError);
+    }
+
+    if (!limitedClosure)
+    {
+        FatalErrorInFunction
+            << "plainBodyZone " << plainBodyZoneName
+            << " needs limitedClosure on" << exit(FatalError);
+    }
+
+    Info<< "SWENSE plainBodyZone " << plainBodyZoneName << ": "
+        << returnReduce(mesh.cellZones()[plainBodyZoneID].size(), sumOp<label>())
+        << " cells with lam = 0" << endl;
+}
+
 // Write the incident residual rI at write times (waveProperties
 // logIncidentResidual, default off). Logging only.
 const bool logIncidentResidual =

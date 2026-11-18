@@ -128,6 +128,22 @@
             }
         }
 
+        // Plain closure in the body zone (plainBodyZone): lam = 0 in every
+        // zone cell; lam_f = 0 follows from the min below
+        if (plainBodyZoneID >= 0)
+        {
+            for (const label c : mesh.cellZones()[plainBodyZoneID])
+            {
+                // nZero counts cells with lam < 0.5 (both closure modes)
+                if (lam[c] >= 0.5)
+                {
+                    ++nZero;
+                }
+
+                lam[c] = 0.0;
+            }
+        }
+
         for (label f = 0; f < mesh.nInternalFaces(); ++f)
         {
             lamf[f] = min(lam[mesh.owner()[f]], lam[mesh.neighbour()[f]]);
