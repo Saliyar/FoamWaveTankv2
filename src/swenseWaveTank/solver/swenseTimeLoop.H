@@ -15,6 +15,9 @@ const bool budgetLog =
 
 while (runTime.run())
 {
+    // Courant numbers (logged) and, with adjustTimeStep yes, the new step
+    #include "swenseTimeStep.H"
+
     runTime++;
 
     Info<< "Time = " << runTime.timeName() << nl << endl;
