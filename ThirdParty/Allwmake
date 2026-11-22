@@ -67,7 +67,7 @@ function Grid2GridInstall()
     echo "Patching Grid2GridOptions.cmake with correct FFTW path..."
     sed -i "s|set(FFTW3_LIB_PATH  .*|set(FFTW3_LIB_PATH  $FFTW3_LIB_PATH)|" Grid2GridOptions.cmake
 
-    cmake -S. -Bbuild -DBUILD_OF_LIB=ON -DCMAKE_FIND_LIBRARY_SUFFIXES=".so;.a" -DFFTW3_LIB_PATH="$FFTW3_LIB_PATH"
+    cmake -S. -Bbuild -DBUILD_OF_LIB=ON -DCMAKE_FIND_LIBRARY_SUFFIXES=".so;.a" -DFFTW3_LIB_PATH="$FFTW3_LIB_PATH" -DCMAKE_POLICY_VERSION_MINIMUM=3.5
     cmake --build build
 
     # Move postG2G to the build directory

@@ -56,6 +56,17 @@ if [ -n "$USER_FFTW3_LIB_PATH" ]; then
         exit 1
     fi
 
+# FFTW already in the environment (e.g. after "module load fftw/3.3.10")
+elif FOUND_FFTW_DIR=$(
+    for d in "$FFTW3_LIB_PATH" "$FFTWDIR" \
+             $(echo "$LIBRARY_PATH:$LD_LIBRARY_PATH" | tr ':' ' ')
+    do
+        [ -n "$d" ] && [ -f "$d/libfftw3.a" ] && { echo "$d"; break; }
+    done
+) && [ -n "$FOUND_FFTW_DIR" ]; then
+    export FFTW3_LIB_PATH="$FOUND_FFTW_DIR"
+    echo "✓ FFTW found in the environment: $FFTW3_LIB_PATH/libfftw3.a"
+
 # Check if module command is available (server installation indicator)
 elif command -v module &> /dev/null; then
     echo "Server installation detected (module command available)"
