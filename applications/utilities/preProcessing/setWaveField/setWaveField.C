@@ -83,6 +83,11 @@ int main(int argc, char *argv[])
 #   include "readWaveProperties.H"
 #   include "createExternalWaveForcing.H"
 
+    // Bring the external forcing (e.g. Grid2Grid/HOS) to the start time, as
+    // the solvers do every time step; otherwise eta/U are evaluated outside
+    // the time window the forcing holds.
+    externalWave->step();
+
 
     Info<< "\nReading field alpha\n" << endl;
     volScalarField alpha
