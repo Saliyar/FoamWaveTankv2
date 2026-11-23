@@ -37,88 +37,165 @@ fi
 ## Set environmental variables
 . ./bin/bashrc
 
-## Detect server vs local installation and handle FFTW
+##############################################################################
+## PREREQUISITES: find out where we are building and check what is needed
+##############################################################################
+#   server : a module system is available (HPC cluster)
+#   ubuntu : Ubuntu / Debian PC, laptop or WSL
+#   rhel   : Fedora / RHEL / Rocky / Alma / CentOS
+#   other  : any other Linux or macOS
+# Nothing is installed without asking. Third-party codes (Grid2Grid, MoorDyn,
+# FloatStepper) are downloaded and built by this script; only the compilers,
+# cmake, git, FFTW, GSL and OpenFOAM must come from the system.
 echo "====================================="
-echo "    CHECKING FFTW AVAILABILITY"
+echo "    CHECKING PREREQUISITES"
 echo "====================================="
 
-# If user set custom FFTW path, use that
-if [ -n "$USER_FFTW3_LIB_PATH" ]; then
-    echo "User-specified FFTW path detected"
-    export FFTW3_LIB_PATH="$USER_FFTW3_LIB_PATH"
-    echo "  Using FFTW from: $FFTW3_LIB_PATH"
-
-    if [ ! -f "$FFTW3_LIB_PATH/libfftw3.a" ]; then
-        echo ""
-        echo "ERROR: libfftw3.a not found at $FFTW3_LIB_PATH"
-        echo "  Check USER_FFTW3_LIB_PATH setting in Allwmake"
-        echo ""
-        exit 1
-    fi
-
-# FFTW already in the environment (e.g. after "module load fftw/3.3.10")
-elif FOUND_FFTW_DIR=$(
-    for d in "$FFTW3_LIB_PATH" "$FFTWDIR" \
-             $(echo "$LIBRARY_PATH:$LD_LIBRARY_PATH" | tr ':' ' ')
-    do
-        [ -n "$d" ] && [ -f "$d/libfftw3.a" ] && { echo "$d"; break; }
-    done
-) && [ -n "$FOUND_FFTW_DIR" ]; then
-    export FFTW3_LIB_PATH="$FOUND_FFTW_DIR"
-    echo "✓ FFTW found in the environment: $FFTW3_LIB_PATH/libfftw3.a"
-
-# Check if module command is available (server installation indicator)
-elif command -v module &> /dev/null; then
-    echo "Server installation detected (module command available)"
-
-    # Try to load FFTW module
-    if module load fftw3/3.3.10 2>/dev/null; then
-        echo "✓ FFTW3/3.3.10 module loaded successfully"
-        export FFTW3_LIB_PATH="${FFTW3_LIB_PATH}"
-        echo "  Using FFTW from: $FFTW3_LIB_PATH"
-
-        # Verify libfftw3.a actually exists at this path
-        if [ ! -f "$FFTW3_LIB_PATH/libfftw3.a" ]; then
-            echo ""
-            echo "ERROR: libfftw3.a not found at $FFTW3_LIB_PATH"
-            echo "  Module loaded but library missing or path incorrect"
-            echo ""
-            exit 1
-        fi
-    else
-        echo "✗ FFTW3/3.3.10 module not available"
-        echo "  Checking for local libfftw3.a..."
-        if [ ! -f "/usr/lib64/libfftw3.a" ] && [ ! -f "/usr/local/lib/libfftw3.a" ]; then
-            echo ""
-            echo "ERROR: FFTW3 static library (libfftw3.a) not found!"
-            echo "  - Try loading module: module load fftw3"
-            echo "  - Or install: sudo yum install fftw-static"
-            echo "  - Or set USER_FFTW3_LIB_PATH in Allwmake"
-            echo ""
-            exit 1
-        fi
-    fi
+OS_ID=""
+OS_LIKE=""
+if [ -f /etc/os-release ]; then
+    OS_ID=$(. /etc/os-release; echo "$ID")
+    OS_LIKE=$(. /etc/os-release; echo "$ID_LIKE")
+fi
+if command -v module >/dev/null 2>&1; then
+    PLATFORM=server
+elif echo " $OS_ID $OS_LIKE " | grep -q -e " ubuntu " -e " debian "; then
+    PLATFORM=ubuntu
+elif echo " $OS_ID $OS_LIKE " | grep -q -e " fedora " -e " rhel " -e " centos "; then
+    PLATFORM=rhel
 else
-    echo "Local PC installation detected (no module command)"
-    echo "  Checking for libfftw3.a in standard locations..."
+    PLATFORM=other
+fi
+grep -qi microsoft /proc/version 2>/dev/null && IS_WSL=" (WSL)" || IS_WSL=""
+echo "Platform: $PLATFORM${IS_WSL}  (${OS_ID:-$(uname -s)})"
 
-    if [ -f "/usr/lib64/libfftw3.a" ]; then
-        export FFTW3_LIB_PATH="/usr/lib64"
-        echo "  ✓ Found at: $FFTW3_LIB_PATH/libfftw3.a"
-    elif [ -f "/usr/local/lib/libfftw3.a" ]; then
-        export FFTW3_LIB_PATH="/usr/local/lib"
-        echo "  ✓ Found at: $FFTW3_LIB_PATH/libfftw3.a"
-    else
-        echo "  ✗ libfftw3.a not found in standard locations"
-        echo ""
-        echo "ERROR: FFTW3 static library required for Grid2Grid build"
-        echo "  Install with: sudo yum install fftw-static"
-        echo "  Or set USER_FFTW3_LIB_PATH in Allwmake"
-        echo ""
-        exit 1
-    fi
+# On a server, try to load FFTW and GSL modules if they are not loaded yet
+if [ "$PLATFORM" = server ]; then
+    for m in fftw/3.3.10 fftw3/3.3.10 fftw fftw3; do
+        [ -n "$FFTWDIR" ] && break
+        module load "$m" >/dev/null 2>&1 && echo "  module load $m"
+    done
 fi
 
+MISSING=""        # names for the error message
+PKG_UBUNTU=""     # apt packages to install
+PKG_RHEL=""       # dnf packages to install
+need () { MISSING="$MISSING $1"; PKG_UBUNTU="$PKG_UBUNTU $2"; PKG_RHEL="$PKG_RHEL $3"; }
+
+command -v gcc      >/dev/null 2>&1 || need gcc      build-essential gcc
+command -v g++      >/dev/null 2>&1 || need g++      build-essential gcc-c++
+command -v make     >/dev/null 2>&1 || need make     build-essential make
+command -v gfortran >/dev/null 2>&1 || need gfortran gfortran        gcc-gfortran
+command -v cmake    >/dev/null 2>&1 || need cmake    cmake           cmake
+command -v git      >/dev/null 2>&1 || need git      git             git
+
+# FFTW: Grid2Grid needs the static library libfftw3.a
+MULTIARCH=$(gcc -print-multiarch 2>/dev/null)
+if [ -n "$USER_FFTW3_LIB_PATH" ]; then
+    FFTW_CANDIDATES="$USER_FFTW3_LIB_PATH"
+else
+    FFTW_CANDIDATES="$FFTW3_LIB_PATH $FFTWDIR $FFTW_LIB \
+        $(echo "$LIBRARY_PATH:$LD_LIBRARY_PATH" | tr ':' ' ') \
+        ${MULTIARCH:+/usr/lib/$MULTIARCH} /usr/lib/x86_64-linux-gnu \
+        /usr/lib/aarch64-linux-gnu /usr/lib64 /usr/lib /usr/local/lib \
+        /usr/local/lib64 /opt/homebrew/lib"
+fi
+FFTW3_FOUND=""
+for d in $FFTW_CANDIDATES; do
+    [ -f "$d/libfftw3.a" ] && { FFTW3_FOUND="$d"; break; }
+done
+if [ -n "$FFTW3_FOUND" ]; then
+    export FFTW3_LIB_PATH="$FFTW3_FOUND"
+    echo "  FFTW  : $FFTW3_LIB_PATH/libfftw3.a"
+else
+    need "FFTW(libfftw3.a)" libfftw3-dev "fftw-devel fftw-static"
+fi
+
+# GSL: waves2Foam needs the headers and the library
+GSL_TEST=$(mktemp -d 2>/dev/null || echo /tmp/fwt_gsl_$$)
+mkdir -p "$GSL_TEST"
+printf '#include <gsl/gsl_errno.h>\nint main(){return gsl_strerror(0)==0;}\n' > "$GSL_TEST/t.c"
+if command -v gcc >/dev/null 2>&1 && \
+   gcc "$GSL_TEST/t.c" -o "$GSL_TEST/t" ${WAVES_GSL_INCLUDE:+-I$WAVES_GSL_INCLUDE} \
+       ${WAVES_GSL_LIB:+-L$WAVES_GSL_LIB} -lgsl -lgslcblas -lm >/dev/null 2>&1
+then
+    echo "  GSL   : found"
+else
+    need GSL libgsl-dev gsl-devel
+fi
+rm -rf "$GSL_TEST"
+
+# OpenFOAM: must be loaded in this terminal (wmake and $WM_PROJECT_DIR)
+OF_OK=1
+if [ -z "$WM_PROJECT_DIR" ] || ! command -v wmake >/dev/null 2>&1; then
+    OF_OK=0
+    MISSING="$MISSING OpenFOAM(not loaded)"
+else
+    echo "  OpenFOAM: $WM_PROJECT_VERSION ($WM_PROJECT_DIR)"
+    case "$WM_PROJECT_VERSION" in
+        v2506) ;;
+        v*) echo "  NOTE: FoamWaveTank is tested with OpenFOAM v2506 (openfoam.com)." ;;
+        *)  echo "  WARNING: this looks like the openfoam.org version. FoamWaveTank"
+            echo "           needs the openfoam.com version (v2506)." ;;
+    esac
+fi
+
+if [ -n "$MISSING" ]; then
+    # unique package lists
+    PKG_UBUNTU=$(echo $PKG_UBUNTU | tr ' ' '\n' | awk 'NF && !s[$0]++' | tr '\n' ' ')
+    PKG_RHEL=$(echo $PKG_RHEL | tr ' ' '\n' | awk 'NF && !s[$0]++' | tr '\n' ' ')
+    echo ""
+    echo "MISSING:$MISSING"
+    echo ""
+    case "$PLATFORM" in
+    server)
+        echo "Load the modules before ./Allwmake, for example on the DTU cluster:"
+        echo "  module load gcc gsl fftw cmake openfoam.com/2506"
+        echo "  source \$WM_PROJECT_DIR/etc/bashrc     # if the module asks for it"
+        ;;
+    ubuntu)
+        [ -n "$PKG_UBUNTU" ] && echo "Install with:  sudo apt update && sudo apt install -y $PKG_UBUNTU"
+        if [ -n "$PKG_UBUNTU" ] && [ -t 0 ] && command -v sudo >/dev/null 2>&1; then
+            printf "Install these packages now with sudo apt? [y/N] "
+            read -r answer
+            if [ "$answer" = y ] || [ "$answer" = Y ]; then
+                sudo apt update && sudo apt install -y $PKG_UBUNTU || exit 1
+                echo "Packages installed. Run ./Allwmake again."
+                [ "$OF_OK" = 1 ] && exit 0
+            fi
+        fi
+        ;;
+    rhel)
+        [ -n "$PKG_RHEL" ] && echo "Install with:  sudo dnf install -y $PKG_RHEL"
+        ;;
+    *)
+        echo "Install the missing tools with your package manager."
+        ;;
+    esac
+    if [ "$OF_OK" = 0 ]; then
+        echo ""
+        echo "OpenFOAM v2506 (openfoam.com) is not loaded in this terminal."
+        OF_RC=$(ls -d /usr/lib/openfoam/openfoam*/etc/bashrc "$HOME"/OpenFOAM/OpenFOAM-v*/etc/bashrc 2>/dev/null | tail -1)
+        if [ -n "$OF_RC" ]; then
+            echo "  It is installed. Load it, then run ./Allwmake again:"
+            echo "    source $OF_RC"
+        elif [ "$PLATFORM" = ubuntu ]; then
+            echo "  Install it (Ubuntu/WSL), load it, then run ./Allwmake again:"
+            echo "    curl -s https://dl.openfoam.com/add-debian-repo.sh | sudo bash"
+            echo "    sudo apt install -y openfoam2506-default"
+            echo "    source /usr/lib/openfoam/openfoam2506/etc/bashrc"
+        elif [ "$PLATFORM" = server ]; then
+            echo "    module load openfoam.com/2506"
+        else
+            echo "  See https://develop.openfoam.com/Development/openfoam/-/wikis/precompiled"
+        fi
+    fi
+    echo ""
+    echo "EXITING: nothing was compiled."
+    exit 1
+fi
+
+echo "All prerequisites found."
 echo "====================================="
 echo ""
 
@@ -141,7 +218,7 @@ then
     echo "EXITING"
     echo ""
 
-    exit
+    exit 1
 fi
 
 # Hard-coded creation of the target for the compiled libraries, solvers and utilities
@@ -175,7 +252,7 @@ then
     echo "Problems with the compilation of the third party dependencies"
     echo "Exiting"
     echo ""
-    exit
+    exit 1
 fi
 
 ## LIBRARY
@@ -365,9 +442,36 @@ fi
 # fi
 # 
 
+## CHECK THAT EVERYTHING A STUDENT NEEDS WAS BUILT
 echo ""
 echo "====================================="
-echo "    COMPILATION DONE"
+echo "    CHECKING THE BUILD"
+echo "====================================="
+BUILD_FAILED=""
+for b in waveFoam waveIsoFoam floatStepper floatStepperWaveIsoFoam \
+         setWaveField setWaveParameters relaxationZoneLayout waveGaugesNProbes
+do
+    [ -x "$WAVES_APPBIN/$b" ] || BUILD_FAILED="$BUILD_FAILED $b"
+done
+for l in libwaves2Foam.so libGrid2Grid.so libmoordyn_v1.so libmoordyn.so \
+         libmoorDynR1SixDoF.so libmoorDynR2SixDoF.so
+do
+    [ -f "$WAVES_LIBBIN/$l" ] || BUILD_FAILED="$BUILD_FAILED $l"
+done
+
+echo ""
+echo "====================================="
+if [ -n "$BUILD_FAILED" ]
+then
+    echo "    COMPILATION FAILED"
+    echo "    Not built:$BUILD_FAILED"
+    echo "    Search log.build for the first \"error\"."
+else
+    echo "    COMPILATION DONE"
+    echo "    All solvers and libraries are in"
+    echo "      $WAVES_APPBIN"
+    echo "      $WAVES_LIBBIN"
+fi
 echo "====================================="
 
 # Calculate and display total build time
@@ -382,3 +486,5 @@ echo "Build finished: $(date)"
 echo "Total build time: ${BUILD_HOURS}h ${BUILD_MINS}m ${BUILD_SECS}s"
 echo "====================================="
 echo ""
+
+[ -z "$BUILD_FAILED" ]
