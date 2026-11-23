@@ -1,5 +1,5 @@
 cff-version: 1.2.0
-message: "If you use FoamWaveTankv2 in your work, please cite it as below."
+message: "If you use FoamWaveTankv2 in your work, please cite the paper below (preferred-citation) and the works it builds on (references)."
 title: "FoamWaveTankv2: HOS-coupled numerical wave tank for OpenFOAM"
 type: software
 authors:
@@ -13,7 +13,31 @@ keywords:
   - waves2Foam
   - higher-order spectral method
   - numerical wave tank
-  - wave-structure interaction
+  - floating body
+  - mooring
+preferred-citation:
+  type: article
+  title: "Numerical coupling strategy using HOS-OpenFOAM-MoorDyn for OC3 Hywind SPAR type platform"
+  authors:
+    - family-names: Aliyar
+      given-names: Sithik
+    - family-names: Ducrozet
+      given-names: Guillaume
+    - family-names: Bouscasse
+      given-names: Benjamin
+    - family-names: Bonnefoy
+      given-names: Félicien
+    - family-names: Sriram
+      given-names: V.
+    - family-names: Ferrant
+      given-names: Pierre
+  journal: "Ocean Engineering"
+  volume: 263
+  start: 112206
+  year: 2022
+  publisher:
+    name: Elsevier
+  doi: "10.1016/j.oceaneng.2022.112206"
 references:
   - type: article
     title: "A wave generation toolbox for the open-source CFD library: OpenFoam"
@@ -31,3 +55,42 @@ references:
     end: 1088
     year: 2012
     doi: "10.1002/fld.2726"
+  - type: article
+    title: "A robust algorithm for computational floating body dynamics"
+    authors:
+      - family-names: Roenby
+        given-names: Johan
+      - family-names: Aliyar
+        given-names: Sithik
+      - family-names: Bredmose
+        given-names: Henrik
+    journal: "Royal Society Open Science"
+    volume: 11
+    start: 231453
+    year: 2024
+    doi: "10.1098/rsos.231453"
+  - type: article
+    title: "Validation of a lumped-mass mooring line model with DeepCwind semisubmersible model test data"
+    authors:
+      - family-names: Hall
+        given-names: Matthew
+      - family-names: Goupee
+        given-names: Andrew
+    journal: "Ocean Engineering"
+    volume: 104
+    start: 590
+    end: 603
+    year: 2015
+    url: "http://www.sciencedirect.com/science/article/pii/S0029801815002279"
+  - type: article
+    title: "CFD simulation of floating body motion with mooring dynamics: Coupling MoorDyn with OpenFOAM"
+    authors:
+      - family-names: Chen
+        given-names: Haifei
+      - family-names: Hall
+        given-names: Matthew
+    journal: "Applied Ocean Research"
+    volume: 124
+    start: 103210
+    year: 2022
+    doi: "10.1016/j.apor.2022.103210"

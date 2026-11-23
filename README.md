@@ -110,18 +110,37 @@ Please feel free to open an issue or submit a pull request.
 
 ## Citation
 
-If you use FoamWaveTankv2 in your work, please cite it. GitHub shows the reference under
-**"Cite this repository"** (from [CITATION.cff](CITATION.cff)); a journal reference will be added here
-when available.
+If you use FoamWaveTankv2, please cite (GitHub also shows this under **"Cite this repository"**, from
+[CITATION.cff](CITATION.cff)):
 
-FoamWaveTankv2 builds on **waves2Foam**; please also cite:
+**HOS–OpenFOAM coupling (FoamWaveTank):**
+
+> S. Aliyar, G. Ducrozet, B. Bouscasse, F. Bonnefoy, V. Sriram, P. Ferrant (2022). Numerical coupling
+> strategy using HOS-OpenFOAM-MoorDyn for OC3 Hywind SPAR type platform. *Ocean Engineering*, 263, 112206.
+> https://doi.org/10.1016/j.oceaneng.2022.112206
+
+**Floating bodies with FloatStepper** (`floatStepper`, `floatStepperWaveIsoFoam`):
+
+> J. Roenby, S. Aliyar, H. Bredmose (2024). A robust algorithm for computational floating body dynamics.
+> *Royal Society Open Science*, 11, 231453. https://doi.org/10.1098/rsos.231453
+
+**Moorings with MoorDyn:**
+
+> M. Hall, A. Goupee (2015). Validation of a lumped-mass mooring line model with DeepCwind semisubmersible
+> model test data. *Ocean Engineering*, 104, 590–603.
+
+> H. Chen, M. Hall (2022). CFD simulation of floating body motion with mooring dynamics: Coupling MoorDyn
+> with OpenFOAM. *Applied Ocean Research*, 124, 103210. https://doi.org/10.1016/j.apor.2022.103210
+
+**Wave generation and absorption (waves2Foam):**
 
 > N. G. Jacobsen, D. R. Fuhrman, J. Fredsøe (2012). A wave generation toolbox for the open-source CFD
 > library: OpenFoam®. *International Journal for Numerical Methods in Fluids*, 70(9), 1073–1088.
 > https://doi.org/10.1002/fld.2726
 
-and, when using HOS wave fields, [HOS-NWT](https://gitlab.com/lheea/HOS-NWT) and
+When using HOS wave fields, please also cite [HOS-NWT](https://gitlab.com/lheea/HOS-NWT) and
 [Grid2Grid](https://gitlab.com/lheea/Grid2Grid) as described in their repositories.
+A dedicated FoamWaveTankv2 paper will be added here when published.
 
 ---
 
