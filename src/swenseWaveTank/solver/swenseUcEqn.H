@@ -196,6 +196,14 @@
         );
     }
 
+    // Discrete incident hydrostatics (incidentHydrostatic discrete): pIncD
+    if (hydroDiscrete)
+    {
+        #include "swenseHydroDiscrete.H"
+    }
+
+    const volScalarField& pIncUse = hydroDiscrete ? pIncD : incident.pInc();
+
     // Logging only (not used by any solve): residual of the incident momentum
     //   rI = [ddt(rhoI UI) + div(rhoPhiI UI)]
     //      + R[(snGrad(pInc - rhoI gh) + ghf snGrad(rhoI)) |Sf|]
@@ -216,7 +224,7 @@
             (fvc::ddt(rhoI, UI) + fvc::div(rhoPhiI, UI, convScheme))
           + fvc::reconstruct
             (
-                (fvc::snGrad(incident.pInc() - rhoI*gh) + ghf*fvc::snGrad(rhoI))
+                (fvc::snGrad(pIncUse - rhoI*gh) + ghf*fvc::snGrad(rhoI))
                *mesh.magSf()
             )
         );
@@ -240,17 +248,27 @@
     // (incidentPressureBalance on): r_I is built with the held incident
     // pressure pIncHeld = pInc - deltaHeld, deltaHeld of the previous step
     // (zero before the first balance). Off: pInc itself, unchanged.
-    tmp<volScalarField> tpIncClosure(incident.pInc());
+    tmp<volScalarField> tpIncClosure(pIncUse);
 
     if (incidentPressureBalance)
     {
-        tpIncClosure = incident.pInc() - deltaHeld;
+        tpIncClosure = pIncUse - deltaHeld;
     }
+
+    // With incidentHydrostatic discrete (and no balance) pIncD - rhoI gh is
+    // formed as pHydI_rgh + pDyn, without the round-off of adding and
+    // removing rhoI gh
+    tmp<volScalarField> tpIncRgh
+    (
+        (hydroDiscrete && !incidentPressureBalance)
+      ? pHrgh + pDynD
+      : tpIncClosure() - rhoI*gh
+    );
 
     surfaceScalarField faceG
     (
         "faceG",
-        (fvc::snGrad(tpIncClosure() - rhoI*gh) + ghf*fvc::snGrad(rhoI))
+        (fvc::snGrad(tpIncRgh()) + ghf*fvc::snGrad(rhoI))
        *mesh.magSf()
     );
 
@@ -298,6 +316,52 @@
     }
 
     const surfaceScalarField faceLim((1.0 - lamf)*faceG);
+
+    // Log of the still-water gate (incidentHydrostatic discrete): largest
+    // |G_f| (N/m3) over all internal faces and with the zone weight, the
+    // largest cell closure |(1-lam) rI_c|, |Uc| and |pc|
+    if (hydroDiscrete && pimple.firstIter())
+    {
+        const scalarField Gm
+        (
+            mag(faceG.primitiveField())/mesh.magSf().primitiveField()
+        );
+        const scalarField Gz
+        (
+            mag(faceLim.primitiveField())/mesh.magSf().primitiveField()
+        );
+        const volVectorField hdCell
+        (
+            (1.0 - lam)
+           *(
+                fvc::ddt(rhoI, UI) + fvc::div(rhoPhiI, UI, convScheme)
+              - viscUI(muOf(alphaI)())
+            )
+        );
+
+        // Split of max|G_f|: vertical and horizontal faces
+        scalar gV = 0, gH = 0;
+        forAll(Gm, f)
+        {
+            if (mag(mesh.Sf()[f].z())/mesh.magSf()[f] > 0.999)
+            {
+                gV = max(gV, Gm[f]);
+            }
+            else
+            {
+                gH = max(gH, Gm[f]);
+            }
+        }
+
+        Info<< "SWENSE hydroDiscrete: t " << runTime.value()
+            << " maxG vert " << gV << " horiz " << gH
+            << " maxGzone " << gMax(Gz)
+            << " maxCell " << gMax(mag(hdCell.primitiveField())())
+            << " maxUc " << gMax(mag(Uc.primitiveField())())
+            << " maxPc " << gMax(mag(pc.primitiveField())())
+            << " maxPDyn " << gMax(mag(pDynD.primitiveField())())
+            << endl;
+    }
 
     if (logZoneSource && plainBodyZoneID >= 0 && pimple.firstIter())
     {

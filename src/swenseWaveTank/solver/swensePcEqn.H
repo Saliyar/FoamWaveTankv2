@@ -104,11 +104,11 @@
     {
         // V3: p with the held incident pressure pIncHeld = pInc - deltaHeld;
         // forces, sixDoF and output read this p
-        p == incident.pInc() - deltaHeld + pc + Drho*gh;
+        p == (hydroDiscrete ? pIncD : incident.pInc()) - deltaHeld + pc + Drho*gh;
     }
     else
     {
-        p == incident.pInc() + pc + Drho*gh;
+        p == (hydroDiscrete ? pIncD : incident.pInc()) + pc + Drho*gh;
     }
 
     p_rgh == p - rho*gh;

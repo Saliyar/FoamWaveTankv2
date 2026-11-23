@@ -573,6 +573,146 @@ scalar zoneSourceThreshold =
         .lookupOrDefault<scalar>("zoneSourceThreshold", 0.05);
 bool zoneSourceCrossed = false;
 
+// Discrete incident hydrostatics (waveProperties incidentHydrostatic
+// discrete, default off; static mesh only). pInc = pHydI + pDyn with
+//   pDyn       = p_side - rho_side g (eta - z)   (swenseIncident::sidePressure)
+//   pHydI_rgh  = pHydI - rhoI gh, marched down each column from the top:
+//                pHydI_rgh(lower) = pHydI_rgh(upper) - gh_f (rhoI(lower) - rhoI(upper))
+//                (the gh_f of G_f on that face), top cell = analytic
+//                rho_side g (eta - z) - rhoI gh.
+// The vertical face residual G_f then has no hydrostatic part, bit for bit.
+// swenseHydroDiscrete.H rebuilds the fields; the closure face term and p use
+// pIncD. Off: nothing is built.
+const word incidentHydrostatic =
+    mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
+        .lookupOrDefault<word>("incidentHydrostatic", "analytic");
+
+if (incidentHydrostatic != "analytic" && incidentHydrostatic != "discrete")
+{
+    FatalErrorInFunction
+        << "incidentHydrostatic must be analytic or discrete, not "
+        << incidentHydrostatic << exit(FatalError);
+}
+
+const bool hydroDiscrete = (incidentHydrostatic == "discrete");
+
+// Column tables: the cell above each cell (-1 at the top) and the face
+// between them; cells in order of falling z
+labelList colAbove(mesh.nCells(), -1);
+labelList colFace(mesh.nCells(), -1);
+labelList colOrder;
+
+volScalarField pHydA
+(
+    IOobject("pHydA", runTime.timeName(), mesh,
+        IOobject::NO_READ, IOobject::NO_WRITE),
+    mesh,
+    dimensionedScalar(p.dimensions(), Zero)
+);
+volScalarField pDynD
+(
+    IOobject("pDynD", runTime.timeName(), mesh,
+        IOobject::NO_READ, hydroDiscrete ? IOobject::AUTO_WRITE : IOobject::NO_WRITE),
+    mesh,
+    dimensionedScalar(p.dimensions(), Zero)
+);
+volScalarField pHrgh
+(
+    IOobject("pHydIrgh", runTime.timeName(), mesh,
+        IOobject::NO_READ, hydroDiscrete ? IOobject::AUTO_WRITE : IOobject::NO_WRITE),
+    mesh,
+    dimensionedScalar(p.dimensions(), Zero)
+);
+volScalarField pIncD
+(
+    IOobject("pIncD", runTime.timeName(), mesh,
+        IOobject::NO_READ, hydroDiscrete ? IOobject::AUTO_WRITE : IOobject::NO_WRITE),
+    incident.pInc()
+);
+
+if (hydroDiscrete)
+{
+    if (mag(g.value().x()) > SMALL || mag(g.value().y()) > SMALL)
+    {
+        FatalErrorInFunction
+            << "incidentHydrostatic discrete needs g along z" << exit(FatalError);
+    }
+
+    const vectorField& Cc = mesh.C().primitiveField();
+    const scalar tolN = 0.999;
+
+    for (label f = 0; f < mesh.nInternalFaces(); ++f)
+    {
+        const vector nf = mesh.Sf()[f]/mesh.magSf()[f];
+
+        if (mag(nf.z()) < tolN)
+        {
+            continue;
+        }
+
+        label lo = mesh.owner()[f];
+        label up = mesh.neighbour()[f];
+
+        if (Cc[up].z() < Cc[lo].z())
+        {
+            Swap(lo, up);
+        }
+
+        if (colAbove[lo] >= 0)
+        {
+            FatalErrorInFunction
+                << "incidentHydrostatic discrete: cell " << lo
+                << " has two cells above" << exit(FatalError);
+        }
+
+        colAbove[lo] = up;
+        colFace[lo] = f;
+    }
+
+    // A column cut by a processor boundary is not allowed (serial or
+    // whole-column decomposition)
+    forAll(mesh.boundaryMesh(), patchi)
+    {
+        const polyPatch& pp = mesh.boundaryMesh()[patchi];
+
+        if (!pp.coupled())
+        {
+            continue;
+        }
+
+        forAll(pp, i)
+        {
+            const vector nf = pp.faceAreas()[i]/mag(pp.faceAreas()[i]);
+
+            if (mag(nf.z()) >= tolN)
+            {
+                FatalErrorInFunction
+                    << "incidentHydrostatic discrete: patch " << pp.name()
+                    << " cuts a column; use serial or whole-column"
+                    << " decomposition" << exit(FatalError);
+            }
+        }
+    }
+
+    scalarField negZ(mesh.nCells());
+    forAll(negZ, c)
+    {
+        negZ[c] = -Cc[c].z();
+    }
+    colOrder = sortedOrder(negZ);
+
+    label nTop = 0;
+    forAll(colAbove, c)
+    {
+        if (colAbove[c] < 0)
+        {
+            ++nTop;
+        }
+    }
+
+    Info<< "SWENSE incidentHydrostatic discrete: columns " << nTop << endl;
+}
+
 // Column level correction of the incident surface (controlDict
 // levelCorrection, default off; swenseColumnLevel.H, called after the
 // relaxation in swenseAlphaRelax.H). With plainBodyZone or a moving mesh it

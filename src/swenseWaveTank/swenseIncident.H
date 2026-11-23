@@ -278,6 +278,14 @@ public:
         const volScalarField& pInc() const { return pInc_; }
         const surfaceVectorField& UfInc() const { return UfInc_; }
 
+        //- Side pressure split (incidentHydrostatic discrete), at the time
+        //  of the last evaluate(), cells and boundary faces. Side: water
+        //  where z_w < eta, air above (eta of the local HOS surface):
+        //    pHyd = rho_side g (eta - z_w)            (analytic hydrostatic)
+        //    pDyn = p_side - pHyd                     (p_side = waterP or the
+        //                                              Air2Air pressure)
+        void sidePressure(volScalarField& pHyd, volScalarField& pDyn) const;
+
         //- Surface rows (x, y, 0) and Grid2Grid eta of row r at time t
         const pointField& etaPts() const { return etaPts_; }
         scalar etaRow(const label r, const scalar t) const { return etaAt(rowPt_[r], t); }

@@ -153,7 +153,7 @@ while (runTime.run())
     Uc.correctBoundaryConditions();
 
     U == Uc + incident.UInc();
-    p == incident.pInc() + pc + Drho*gh;
+    p == (hydroDiscrete ? pIncD : incident.pInc()) + pc + Drho*gh;
     p_rgh == p - rho*gh;
 
     runTime.write();

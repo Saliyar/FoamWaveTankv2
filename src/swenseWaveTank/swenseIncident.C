@@ -677,6 +677,70 @@ Foam::vector Foam::swenseIncident::blendFace
 
 
 
+void Foam::swenseIncident::sidePressure
+(
+    volScalarField& pHyd,
+    volScalarField& pDyn
+) const
+{
+    const scalar t = tNow_;
+
+    auto split = [&](const label ip, scalar& ph, scalar& pd)
+    {
+        const scalar zw = (pts_[ip] - refPos_).z();
+        const scalar eta = etaAt(ip, t);
+
+        scalar ps = 0.0;
+        scalar rs = 0.0;
+
+        if (zw < eta)
+        {
+            ps = waterPAt(ip, t);
+            rs = rhoWater_;
+        }
+        else
+        {
+            airUP(ip, ps);
+            rs = rhoAir_;
+        }
+
+        ph = rs*magG_*(eta - zw);
+        pd = ps - ph;
+    };
+
+    scalarField& ph = pHyd.primitiveFieldRef();
+    scalarField& pd = pDyn.primitiveFieldRef();
+
+    forAll(ph, celli)
+    {
+        split(celli, ph[celli], pd[celli]);
+    }
+
+    label ip = offCb_;
+
+    forAll(pHyd.boundaryField(), patchi)
+    {
+        const label nf = mesh_.C().boundaryField()[patchi].size();
+
+        for (label facei = 0; facei < nf; ++facei)
+        {
+            scalar a = 0.0, b = 0.0;
+            split(ip, a, b);
+
+            if (!pHyd.boundaryField()[patchi].coupled())
+            {
+                pHyd.boundaryFieldRef()[patchi][facei] = a;
+                pDyn.boundaryFieldRef()[patchi][facei] = b;
+            }
+            ++ip;
+        }
+    }
+
+    pHyd.correctBoundaryConditions();
+    pDyn.correctBoundaryConditions();
+}
+
+
 Foam::volScalarField Foam::swenseIncident::blendAlpha(const scalar t) const
 {
     volScalarField alpha
