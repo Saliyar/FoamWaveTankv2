@@ -10,12 +10,20 @@
 
     surfaceScalarField rAUf("rAUf", fvc::interpolate(rAU()));
     volVectorField HbyA(constrainHbyA(rAU()*UEqn.H(), U, p_rgh));
-    surfaceScalarField phiHbyA
+    // "ddtCorr on|off;" in system/fvSchemes (default on): add the ddtCorr
+    // flux correction to phiHbyA, or leave it out. Read every corrector,
+    // so it can be changed while the case runs.
+    const Switch ddtCorr
     (
-        "phiHbyA",
-        fvc::flux(HbyA)
-      + MRF.zeroFilter(fvc::interpolate(rho*rAU())*fvc::ddtCorr(U, phi, Uf))
+        mesh.schemesDict().getOrDefault<Switch>("ddtCorr", Switch::ON)
     );
+
+    surfaceScalarField phiHbyA("phiHbyA", fvc::flux(HbyA));
+    if (ddtCorr)
+    {
+        phiHbyA +=
+            MRF.zeroFilter(fvc::interpolate(rho*rAU())*fvc::ddtCorr(U, phi, Uf));
+    }
     MRF.makeRelative(phiHbyA);
 
     if (p_rgh.needReference())
