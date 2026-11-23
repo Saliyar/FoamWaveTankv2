@@ -72,3 +72,70 @@ off by default, so the defaults behave as 30df70a.
 - Moving or smoothing the edge does not remove it.
 - This agrees with phaseC.md C6 loop 4: a smaller zone gave no gain.
 - A fix would have to make the incident residual zero for the discrete incident wave itself, not reshape the zone.
+
+# Discrete incident hydrostatics (`incidentHydrostatic discrete`), 23 Nov 2026
+
+Commit d74387f (switch, default `analytic` = unchanged). Static mesh only; serial or whole-column decomposition.
+
+## Step 0: code check
+
+- **(a) Part V is not the same thing.**
+  - Part V solves `laplacian(rAUf, deltaHeld) = div(Phi[r_I])` over the whole r_I flux (cell part plus rAUf G_f) and applies it one step late ([swenseBalanceFlux.H:30-35](../src/swenseWaveTank/solver/swenseBalanceFlux.H#L30-L35), [swenseBalanceSolve.H:39-46](../src/swenseWaveTank/solver/swenseBalanceSolve.H#L39-L46)).
+  - That is a global Poisson projection. It does not rebuild pInc column by column, and it leaves the solenoidal part. So I continued.
+- **(b) The cell closure has no hydrostatic part.**
+  - It is `(1-lam)*(ddt(rhoI UI) + div(rhoPhiI UI) - visc)` ([swenseUcEqn.H:192-196](../src/swenseWaveTank/solver/swenseUcEqn.H#L192-L196)).
+  - Pressure and hydrostatics enter only through the face term faceLim. That term is reconstructed in the Uc predictor ([swenseUcEqn.H](../src/swenseWaveTank/solver/swenseUcEqn.H), `fvc::reconstruct(... - faceLim)`) and enters pc as a flux ([swensePcEqn.H:29-33](../src/swenseWaveTank/solver/swensePcEqn.H#L29-L33)).
+  - It is not fvc::grad, so the "reconstruct when on" change was not needed.
+
+## Step 1: the switch
+
+- **pDyn** = p_side − rho_side g (eta − z).
+  - p_side is the water model pressure where z < eta_HOS, and the Air2Air pressure above.
+  - So pDyn = 0 in still water.
+- **pHydI_rgh** is marched down each column: `P(lower) = P(upper) - ghf_f (rhoI(lower) - rhoI(upper))`.
+  - It uses the same ghf as G_f.
+  - The top cell is set to the analytic rho_side g (eta − z) − rhoI gh.
+  - Boundary faces use the same relation from the owner cell.
+- **pInc** = pHydI_rgh + rhoI gh + pDyn.
+- This pInc is used in G_f, in the closure face term and in p. Files: [swenseHydroDiscrete.H](../src/swenseWaveTank/solver/swenseHydroDiscrete.H) and `swenseIncident::sidePressure`.
+
+## Step 2: gate S (still water, coarse, zone on, 2 s)
+
+The wave is scaled to about 3e-12 with rampTsoft 1e12, because Air2Air refuses H = 0.
+
+| Run | max \|G_f\| (N/m³) | max cell closure | max \|Uc\| (m/s) | max \|pc\| (Pa) |
+|---|--:|--:|--:|--:|
+| S0, switch off | ±800 pair (as Z0) | ~0 | 0.35 | (as Z0) |
+| S1, discrete | 3.3e-9 | 3.1e-9 | 1.5e-12 | 7e-10 |
+
+**Gate S passes.** Everything is at round-off. The 3e-9 left is the 3e-12-scaled wave itself.
+
+## Step 3: gate W (waves, zone on, 23 s; gauges ±1, ±1.5, ±2)
+
+| Run | Water Uc outside, max / median (m/s) | Wave error (mm) | Wiggles (mm) | Gate |
+|---|--:|--:|--:|---|
+| F3b, no zone | 0 / 0 | 3.71 | 0.20 | reference |
+| Z0, zone, analytic | 0.67 / 0.35 | 5.58 | 2.09 | fail |
+| ZD, zone, discrete | 0.35 / 0.11 | 4.93 | 0.83 | fail |
+
+- **Gate W fails.** Wave error is F3b + 1.2 mm, against the 1 mm limit. Wiggles are 0.83 mm, against 0.3. Uc is not zero.
+- **ZD improves on Z0.** Uc outside the zone is halved (3× lower median), wiggles drop by 60 % and the error is 0.65 mm better.
+- **First crossing of 0.05 m/s:** at 2.67 s, against 0.077 s in Z0. It is now wave-driven, not hydrostatic.
+- **Source split, ZD, 12-23 s** (median N/m³):
+
+| Where | Cell closure | Face term | Rest |
+|---|--:|--:|--:|
+| Around the max-Uc cell | 80 | **278** | 126 |
+| Edge band (∫) | 5.9 | **9.4** | 0.26 |
+| Zone (∫) | 54 | **60** | 0.97 |
+
+- **What is left.**
+  - The face term is still the largest, but the cell closure is now close to it.
+  - In waves G_f reaches 900-1100 N/m³ on both vertical and horizontal faces.
+  - That is the dynamic and lateral residual of the smeared wave interface, not hydrostatics.
+
+## Step 4: F3b with the switch on
+
+Not required, because W did not come within 1 mm. It ran in parallel anyway: F3bD is identical to F3b (Uc = 0; 3.706 mm and 0.195 mm). The switch does not touch a zone-free tank.
+
+Runs (`zonefix/`): S0, S1, ZD, F3bD.
