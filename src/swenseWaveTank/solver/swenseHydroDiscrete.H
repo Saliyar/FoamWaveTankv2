@@ -8,14 +8,11 @@
 // Boundary faces: the same relation from the owner cell,
 //   pHrgh_b = pHrgh_c - gh_b (rhoI_b - rhoI_c)    (gh_b = ghf on the patch)
 // so the face residual G_f of a boundary face has no hydrostatic part either.
+// Moving mesh: the columns are topological (built once at set-up); each
+// step the march uses the current gh_f of each face and the current eta and
+// side pressure at the moved points. A column whose top face is a wall (the
+// cells under a body) starts from the analytic value in its top cell.
 {
-    if (mesh.moving())
-    {
-        FatalErrorInFunction
-            << "incidentHydrostatic discrete is for a static mesh only"
-            << exit(FatalError);
-    }
-
     incident.sidePressure(pHydA, pDynD);
 
     scalarField& P = pHrgh.primitiveFieldRef();

@@ -574,7 +574,7 @@ scalar zoneSourceThreshold =
 bool zoneSourceCrossed = false;
 
 // Discrete incident hydrostatics (waveProperties incidentHydrostatic
-// discrete, default off; static mesh only). pInc = pHydI + pDyn with
+// discrete, default off; static or moving mesh). pInc = pHydI + pDyn with
 //   pDyn       = p_side - rho_side g (eta - z)   (swenseIncident::sidePressure)
 //   pHydI_rgh  = pHydI - rhoI gh, marched down each column from the top:
 //                pHydI_rgh(lower) = pHydI_rgh(upper) - gh_f (rhoI(lower) - rhoI(upper))
@@ -596,8 +596,11 @@ if (incidentHydrostatic != "analytic" && incidentHydrostatic != "discrete")
 
 const bool hydroDiscrete = (incidentHydrostatic == "discrete");
 
-// Column tables: the cell above each cell (-1 at the top) and the face
-// between them; cells in order of falling z
+// Column tables, built once on the mesh at set-up (topology: the cell
+// through the top face of each cell, found by the face normal at set-up;
+// -1 where the top face is a boundary: atmosphere, or a body wall). Cells in
+// order of falling set-up z, which keeps every cell after the one above it
+// whatever the later motion
 labelList colAbove(mesh.nCells(), -1);
 labelList colFace(mesh.nCells(), -1);
 labelList colOrder;
@@ -710,7 +713,9 @@ if (hydroDiscrete)
         }
     }
 
-    Info<< "SWENSE incidentHydrostatic discrete: columns " << nTop << endl;
+    Info<< "SWENSE incidentHydrostatic discrete: column starts " << nTop
+        << (mesh.dynamic() ? " (moving mesh: topology fixed at set-up)" : "")
+        << endl;
 }
 
 // Column level correction of the incident surface (controlDict
