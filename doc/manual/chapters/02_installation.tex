@@ -101,6 +101,11 @@ git pull
 \file{Allwmake} also updates FloatStepper to its latest version. \file{./Allwclean} removes all
 build files if a completely fresh build is needed.
 
+\NB{Clones made before 23 November 2026 have FloatStepper in the folder
+\file{applications/solvers/floatStepperWaveFoam}. It is now in
+\file{applications/solvers/floatStepperWaveIsoFoam}, which \file{Allwmake} creates; delete the old
+folder after updating: \kw{rm -rf applications/solvers/floatStepperWaveFoam}.}
+
 \section{Troubleshooting}
 \begin{description}
   \item[``OpenFOAM v2506 is not loaded''] Source the OpenFOAM \file{etc/bashrc} in the same

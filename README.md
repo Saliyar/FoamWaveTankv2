@@ -1,33 +1,59 @@
-# FoamWaveTankv2
+# FoamWaveTank
 
-## Overview
+A numerical wave tank for **OpenFOAM v2506** (openfoam.com), built on
+[waves2Foam](https://doi.org/10.1002/fld.2726). It imposes nonlinear, phase-resolved wave fields from
+the Higher-Order Spectral (HOS) solvers HOS-NWT and HOS-Ocean in the CFD domain, adds ocean currents,
+and simulates floating bodies with [FloatStepper](https://doi.org/10.1098/rsos.231453) and moorings with
+[MoorDyn](https://github.com/FloatingArrayDesign/MoorDyn).
 
-**FoamWaveTankv2** is a coupled numerical framework integrating a **Higher-Order Spectral (HOS)** wave model with **OpenFOAM** for high-fidelity wave–structure interaction simulations. The coupling is implemented in a format compatible with **waves2Foam**, enabling efficient transfer of nonlinear wave fields into CFD simulations.
+Developed and maintained by Sithik Aliyar, DTU Wind and Energy Systems.
+Please cite the papers listed under [Citation](#citation) when you use the code.
 
-The framework leverages the **Grid2Grid** methodology for consistent interpolation and mapping between the HOS solver and the OpenFOAM computational domain. This allows accurate representation of nonlinear wave kinematics and dynamics within a CFD-based wave tank environment.
+**Documentation:** [FoamWaveTank Manual](doc/manual/FoamWaveTank_Manual.pdf) (what FoamWaveTank adds);
+the waves2Foam Manual (N. G. Jacobsen, 2017) for the relaxation zones, wave theories and utilities it inherits.
 
-
----
-
-## Key Features
-
-* Coupling of **HOS wave solver** with **OpenFOAM (.com version)**
-* Compatibility with **waves2Foam-style workflows**
-* Grid-to-grid interpolation using **Grid2Grid**
-* Designed for **nonlinear wave propagation and wave–structure interaction**
-* Modular structure for easy extension and testing
-* Applicable to offshore and coastal engineering problems
+![FoamWaveTank methodology and validation](Sithik_foamU2025.jpg)
 
 ---
 
-## Requirements
+## The solvers
 
-* **OpenFOAM v2506 (openfoam.com / ESI version)**. The openfoam.org versions are not supported.
-* A C/C++/Fortran compiler, make, CMake, git, FFTW3 and GSL.
-* Linux: Ubuntu/Debian (also WSL on Windows), RHEL/Rocky/Fedora, or an HPC server with environment modules.
+| Solver | Interface capturing | Wave zones | Body motion | Manual |
+|---|---|---|---|---|
+| `waveFoam` | MULES | yes | `sixDoFRigidBodyMotion` | Sec. 4.1 |
+| `waveIsoFoam` | isoAdvector | yes | `sixDoFRigidBodyMotion` | Sec. 4.2 |
+| `floatStepperWaveIsoFoam` | isoAdvector | yes | FloatStepper | Sec. 4.4 |
+| `floatStepper` | isoAdvector | no | FloatStepper | Sec. 4.4 |
 
-waves2Foam, Grid2Grid, MoorDyn and FloatStepper are included and compiled by `./Allwmake`.
-HOS-NWT ([repository](https://gitlab.com/lheea/HOS-NWT)) is only needed to generate your own HOS wave fields.
+All solvers accept every waves2Foam wave theory and the HOS forcing, and have a `ddtCorr on|off;`
+switch in `system/fvSchemes` (default `on`, manual Sec. 4.3).
+
+What FoamWaveTank adds to waves2Foam:
+
+| Feature | Keyword / library | Manual |
+|---|---|---|
+| HOS wave field (HOS-NWT, HOS-Ocean via Grid2Grid) | `externalForcing Grid2Grid;` | Ch. 3 |
+| HOS waves plus a current (constant, depth-varying, parabolic) | `externalForcing Grid2GridWithCurrent;` | Sec. 3.5 |
+| Current only, in a relaxation zone | `waveType DepthvaryingCurrent;` | Sec. 3.6 |
+| MoorDyn v1/v2 moorings for FloatStepper | `floaterMotionRestraint moorDynR1/moorDynR2` | Ch. 5 |
+| MoorDyn v1/v2 moorings for `sixDoFRigidBodyMotion` | `sixDoFRigidBodyMotionRestraint moorDynR1/moorDynR2` | Sec. 5.3 |
+| Installation with prerequisite and result checks | `./Allwmake` | Ch. 2 |
+
+---
+
+## Contents
+
+| Directory | Contents |
+|---|---|
+| `src/waves2Foam/` | waves2Foam library, including the HOS (`externalWaveForcing/Grid2Grid*`) and current (`current/DepthvaryingCurrent`) theories |
+| `src/moorDynSixDoF/` | MoorDyn restraints for `sixDoFRigidBodyMotion` (`libmoorDynR1SixDoF`, `libmoorDynR2SixDoF`) |
+| `src/waves2Foam*/` | other waves2Foam libraries (processing, sampling, GABC) |
+| `applications/solvers/` | `waveFoam`, `waveIsoFoam`, and `floatStepperWaveIsoFoam/` (FloatStepper, git submodule, with MoorDyn) |
+| `applications/utilities/` | waves2Foam pre- and post-processing utilities (`setWaveField`, `setWaveParameters`, `relaxationZoneLayout`, `waveGaugesNProbes`, ...) |
+| `ThirdParty/` | Grid2Grid (HOS wrapper, downloaded and built by `Allwmake`) and fenton4Foam |
+| `tutorials/` | example cases (below) |
+| `doc/manual/` | the manual, LaTeX source and PDF |
+| `bin/` | environment file (`bashrc`, created from `bashrc.org`) |
 
 ---
 
@@ -42,19 +68,19 @@ source /usr/lib/openfoam/openfoam2506/etc/bashrc     # Ubuntu/WSL package instal
 git clone https://github.com/Saliyar/FoamWaveTankv2.git
 cd FoamWaveTankv2
 
-## Step 3: Compile (about 10 minutes)
+## Step 3: Compile (10-20 minutes)
 ./Allwmake
 ```
 
 `./Allwmake` first detects where it is running (HPC server, Ubuntu/Debian or RHEL-type Linux) and checks
-the prerequisites. If something is missing it compiles nothing, lists what is missing and prints the
-command that installs it, for example on Ubuntu:
+the prerequisites: compilers, make, CMake, git, FFTW, GSL and OpenFOAM v2506. If something is missing it
+compiles nothing, lists what is missing and prints the command that installs it, for example on Ubuntu:
 
 ```bash
 sudo apt update && sudo apt install -y build-essential gfortran cmake git libfftw3-dev libgsl-dev
 ```
 
-(On Ubuntu it offers to run this for you.) If OpenFOAM v2506 is not installed yet, it prints the install
+(On Ubuntu it offers to run this for you.) If OpenFOAM v2506 is not installed, it prints the install
 commands as well:
 
 ```bash
@@ -62,49 +88,39 @@ curl -s https://dl.openfoam.com/add-debian-repo.sh | sudo bash
 sudo apt install -y openfoam2506-default
 ```
 
-Install what it asks for, then run `./Allwmake` again. The build ends with `COMPILATION DONE` and lists
-where the solvers and libraries were installed (`$FOAM_USER_APPBIN`, `$FOAM_USER_LIBBIN`), or with
-`COMPILATION FAILED` and the names of the parts that did not build.
+The build ends with `COMPILATION DONE` and the folders of the solvers and libraries
+(`$FOAM_USER_APPBIN`, `$FOAM_USER_LIBBIN`), or with `COMPILATION FAILED` and the parts that did not build.
+The openfoam.org versions of OpenFOAM are not supported.
+
+## Updating
+
+```bash
+cd FoamWaveTankv2
+git pull
+./Allwmake
+```
+
+`Allwmake` also updates FloatStepper. Clones made before 23 November 2026 have the FloatStepper submodule
+in the old folder `applications/solvers/floatStepperWaveFoam`; after updating, delete it with
+`rm -rf applications/solvers/floatStepperWaveFoam`.
 
 ---
 
-## Usage
+## Tutorials
 
-1. Prepare the HOS input and simulation parameters.
-2. Set up the OpenFOAM case following the **waves2Foam structure**.
-3. Configure coupling parameters (Grid2Grid mapping, time stepping, etc.).
-4. Run the simulation:
+Copy a tutorial to a working folder and run `./Allrun` there (`./Allclean` resets it).
 
-   ```bash
-   ./Allrun
-   ```
+| Tutorial | Solver | Shows | Needs |
+|---|---|---|---|
+| `tutorials/waveFoam` | `waveFoam` | HOS-NWT waves through inlet and outlet relaxation zones | `constant/modes_HOS_SWENSE.dat` |
+| `tutorials/waveIsoFoam` | `waveIsoFoam` | the same case with isoAdvector | `constant/modes_HOS_SWENSE.dat` |
+| `tutorials/HOS_with_Current` | `waveFoam` | HOS waves with a depth-varying current | `constant/modes_HOS_SWENSE.dat` |
+| `tutorials/CurrentWithProfile` | `waveIsoFoam` | a current without waves (constant, depth-varying or parabolic profile) | -- |
+| `tutorials/floatStepperWaveIsoFoam` | `floatStepperWaveIsoFoam` | a box moored with MoorDyn v2 in regular waves (about 5 min on one core) | -- |
+| `tutorials/postProcessingScript` | MATLAB | wave comparison, spectra, peak statistics | -- |
 
----
-
-## Applications
-
-This framework is intended for:
-
-* Nonlinear wave propagation studies
-* Wave–structure interaction problems
-* Floating offshore wind turbine simulations
-* Coastal and offshore hydrodynamics research
-
----
-
-## Current Status
-
-⚠️ **Work in Progress**
-
-This repository is actively under development. Features, structure, and implementation details may change. Validation studies and documentation are ongoing.
-
-![FoamWaveTank methodology and Validation](Sithik_foamU2025.jpg)
----
-
-## Contribution & Feedback
-
-Contributions, suggestions, and feedback are highly welcome.
-Please feel free to open an issue or submit a pull request.
+The HOS file is produced by HOS-NWT ([repository](https://gitlab.com/lheea/HOS-NWT)) and is not part of
+this repository.
 
 ---
 
@@ -155,8 +171,8 @@ software via www.openfoam.com, and owner of the OPENFOAM® and OpenCFD® trade m
 
 ---
 
-## Author
+## Contact and bug reports
 
-Sithik Aliyar
-DTU Wind and Energy Systems
+Please report bugs and questions on the issue tracker of this repository.
 
+Sithik Aliyar, DTU Wind and Energy Systems, Technical University of Denmark.
