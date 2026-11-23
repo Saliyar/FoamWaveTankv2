@@ -225,7 +225,7 @@ do
 done
 
 ## FLOAT STEPPER WITH WAVES
-# Compile floatStepperWaveFoam with integrated waves2Foam coupling
+# Compile FloatStepper (floatStepper, floatStepperWaveIsoFoam) with integrated waves2Foam coupling
 echo ""
 echo "====================================="
 echo "    COMPILE FLOATSTEPPERWAVEFOAM"

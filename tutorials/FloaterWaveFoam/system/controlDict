@@ -15,7 +15,7 @@ FoamFile
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-application     floatStepperWaveFoam;
+application     floatStepperWaveIsoFoam;
 
 startFrom       latestTime;
 
