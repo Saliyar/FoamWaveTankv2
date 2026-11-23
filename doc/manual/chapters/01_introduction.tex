@@ -16,7 +16,7 @@ theories and utilities, and adds:
         scheme instead of MULES (Chapter~\ref{ch:solvers});
   \item floating bodies with FloatStepper~\cite{roenby2024robust}, through the solvers
         \app{floatStepper} and \app{floatStepperWaveIsoFoam};
-  \item moorings with MoorDyn~\cite{hall2015validation,chen2022cfd}, both for FloatStepper and
+  \item moorings with MoorDyn~\cite{aliyar2022numerical,chen2022cfd,hall2015validation}, both for FloatStepper and
         for OpenFOAM's own \kw{sixDoFRigidBodyMotion} solver;
   \item an installation script that checks the computer it runs on, reports missing
         prerequisites and verifies the result (Chapter~\ref{ch:install}).
@@ -82,7 +82,8 @@ paper~\cite{aliyar2022numerical} and \wtwof{}~\cite{jacobsen2012wave}. In additi
 \begin{itemize}
   \item FloatStepper~\cite{roenby2024robust} when you use \app{floatStepper} or
         \app{floatStepperWaveIsoFoam};
-  \item MoorDyn~\cite{hall2015validation} and its OpenFOAM coupling~\cite{chen2022cfd} when
+  \item the HOS--OpenFOAM--MoorDyn coupling~\cite{aliyar2022numerical}, the MoorDyn--OpenFOAM
+        coupling~\cite{chen2022cfd} and MoorDyn~\cite{hall2015validation} when
         you use moorings;
   \item HOS-NWT~\cite{ducrozet2012modified} or HOS-Ocean~\cite{ducrozet2016hosocean}, and
         Grid2Grid~\cite{choi2019grid2grid}, when you use HOS wave fields.

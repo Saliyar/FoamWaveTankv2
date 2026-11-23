@@ -5,8 +5,9 @@
 MoorDyn is a lumped-mass mooring line model~\cite{hall2015validation}. \fwt{} couples it to the
 rigid-body motion as a \emph{restraint}: at every time step the body position and velocity are
 passed to MoorDyn, which integrates the line dynamics and returns the mooring force and moment.
-The coupling follows Chen and Hall~\cite{chen2022cfd}; its use with HOS waves is described
-in~\cite{aliyar2022numerical}.
+The HOS--OpenFOAM--MoorDyn coupling strategy and its validation are described
+in~\cite{aliyar2022numerical}; the MoorDyn--OpenFOAM coupling follows Chen and
+Hall~\cite{chen2022cfd}.
 
 Two MoorDyn versions are built:
 \begin{description}

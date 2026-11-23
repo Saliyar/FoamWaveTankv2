@@ -142,11 +142,15 @@ If you use FoamWaveTankv2, please cite (GitHub also shows this under **"Cite thi
 
 **Moorings with MoorDyn:**
 
-> M. Hall, A. Goupee (2015). Validation of a lumped-mass mooring line model with DeepCwind semisubmersible
-> model test data. *Ocean Engineering*, 104, 590–603.
+> S. Aliyar, G. Ducrozet, B. Bouscasse, F. Bonnefoy, V. Sriram, P. Ferrant (2022). Numerical coupling
+> strategy using HOS-OpenFOAM-MoorDyn for OC3 Hywind SPAR type platform. *Ocean Engineering*, 263, 112206.
+> https://doi.org/10.1016/j.oceaneng.2022.112206
 
 > H. Chen, M. Hall (2022). CFD simulation of floating body motion with mooring dynamics: Coupling MoorDyn
 > with OpenFOAM. *Applied Ocean Research*, 124, 103210. https://doi.org/10.1016/j.apor.2022.103210
+
+> M. Hall, A. Goupee (2015). Validation of a lumped-mass mooring line model with DeepCwind semisubmersible
+> model test data. *Ocean Engineering*, 104, 590–603.
 
 **Wave generation and absorption (waves2Foam):**
 
@@ -157,6 +161,16 @@ If you use FoamWaveTankv2, please cite (GitHub also shows this under **"Cite thi
 When using HOS wave fields, please also cite [HOS-NWT](https://gitlab.com/lheea/HOS-NWT) and
 [Grid2Grid](https://gitlab.com/lheea/Grid2Grid) as described in their repositories.
 A dedicated FoamWaveTankv2 paper will be added here when published.
+
+---
+
+## Use of generative AI
+
+Claude Code, with Anthropic's Claude Opus models, was used in the development of this repository,
+including the installation script (`Allwmake`), the MoorDyn restraints for `sixDoFRigidBodyMotion`,
+bug fixes in the solvers and utilities, the tutorial fixes, the build tests, the manual and this README.
+All code, cases and documentation produced with the tool have been reviewed by the author, who takes
+full responsibility for them.
 
 ---
 
