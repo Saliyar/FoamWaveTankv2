@@ -305,20 +305,20 @@ done
 # Compile FloatStepper (floatStepper, floatStepperWaveIsoFoam) with integrated waves2Foam coupling
 echo ""
 echo "====================================="
-echo "    COMPILE FLOATSTEPPERWAVEFOAM"
+echo "    COMPILE FLOATSTEPPERWAVEISOFOAM"
 echo "====================================="
-if [ -d "applications/solvers/floatStepperWaveFoam" ]
+if [ -d "applications/solvers/floatStepperWaveIsoFoam" ]
 then
     # Build ThirdParty (MoorDyn) and wrapper - includes all src/ and applications/
-    ( cd applications/solvers/floatStepperWaveFoam; ./Allwmake )
+    ( cd applications/solvers/floatStepperWaveIsoFoam; ./Allwmake )
     if [ $? -ne 0 ]
     then
         echo ""
-        echo "WARNING: floatStepperWaveFoam compilation had issues"
+        echo "WARNING: floatStepperWaveIsoFoam compilation had issues"
         echo ""
     fi
 else
-    echo "WARNING: floatStepperWaveFoam directory not found"
+    echo "WARNING: floatStepperWaveIsoFoam directory not found"
 fi
 
 # Compile MoorDyn restraints for sixDoFRigidBodyMotion (waveFoam, waveIsoFoam)
@@ -333,7 +333,7 @@ else
     echo "WARNING: libmoordyn_v1.so not found, skipping moorDynR1SixDoF"
 fi
 if [ -f "$FOAM_USER_LIBBIN/libmoordyn.so" ] \
-&& [ -d "applications/solvers/floatStepperWaveFoam/ThirdParty/MoorDyn/submodules/MoorDyn.build/include/moordyn" ]
+&& [ -d "applications/solvers/floatStepperWaveIsoFoam/ThirdParty/MoorDyn/submodules/MoorDyn.build/include/moordyn" ]
 then
     ( cd src/moorDynSixDoF/moorDynR2; wmake libso )
 else

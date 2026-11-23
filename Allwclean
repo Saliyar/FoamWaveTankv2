@@ -37,18 +37,18 @@ done
 ## FLOAT STEPPER WITH WAVES
 echo ""
 echo "====================================="
-echo "    CLEAN FLOATSTEPPERWAVEFOAM"
+echo "    CLEAN FLOATSTEPPERWAVEISOFOAM"
 echo "====================================="
 
-if [ -d "applications/solvers/floatStepperWaveFoam" ]
+if [ -d "applications/solvers/floatStepperWaveIsoFoam" ]
 then
-    ( cd applications/solvers/floatStepperWaveFoam; ./Allwclean )
+    ( cd applications/solvers/floatStepperWaveIsoFoam; ./Allwclean )
     if [ $? -ne 0 ]
     then
-        echo "WARNING: floatStepperWaveFoam cleaning had issues"
+        echo "WARNING: floatStepperWaveIsoFoam cleaning had issues"
     fi
 else
-    echo "WARNING: floatStepperWaveFoam directory not found"
+    echo "WARNING: floatStepperWaveIsoFoam directory not found"
 fi
 
 
