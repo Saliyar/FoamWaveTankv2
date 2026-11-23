@@ -139,3 +139,58 @@ The wave is scaled to about 3e-12 with rampTsoft 1e12, because Air2Air refuses H
 Not required, because W did not come within 1 mm. It ran in parallel anyway: F3bD is identical to F3b (Uc = 0; 3.706 mm and 0.195 mm). The switch does not touch a zone-free tank.
 
 Runs (`zonefix/`): S0, S1, ZD, F3bD.
+
+# Width, moving mesh, heave decay (switch on), 23 Nov 2026
+
+Commit bdcffce: `incidentHydrostatic discrete` on a moving mesh.
+- Columns are found once at set-up through the top and bottom faces.
+- Each step the march uses the face's current gh_f and the moved incident points.
+- Columns under the box wall start from the analytic value. The box mesh has 104 column starts: 100 plus 4 under the box.
+- The static-mesh FatalError is removed.
+
+**Outcome:** M0 is not round-off at 23 s, but the cause is the moving-mesh path, not the switch. Step 3 fails (no width within 0.5 %). Stopped before step 4.
+
+## Step 1: zone width (empty tank, coarse, switch on, 23 s; gauges ±1, ±1.5, ±2)
+
+| Run | Zone | Water Uc outside, max / median (m/s) | Wave error (mm) | Wiggles (mm) |
+|---|---|--:|--:|--:|
+| F3b | none | 0 / 0 | 3.71 | 0.20 |
+| ZD | 1.0 m (\|x\| < 0.5) | 0.35 / 0.11 | 4.93 | 0.83 |
+| W07 | 0.7 m (\|x\| < 0.35) = box motion range + 2 cells | 0.24 / 0.08 | 4.51 | 0.71 |
+| W05 | 0.5 m (\|x\| < 0.25) | 0.21 / 0.07 | **4.22** | 0.72 |
+
+- The motion range comes from test 2: the box spans x = −0.214 to 0.240 m, plus 2 cells of 0.05 m.
+- **The error falls as the zone shrinks.** W05 is within 1 mm of F3b (F3b + 0.52 mm).
+- Wiggles stay at about 0.7 mm, against the 0.3 mm limit, and Uc is not zero.
+
+## Step 2: gate M0 (solidBody linearMotion with velocity 0, so mesh.moving() is true)
+
+| Pair | Wave error (mm) | Largest gauge difference at 23 s (mm) | First Uc difference |
+|---|--:|--:|---|
+| M0 against ZD (switch on) | 4.86 / 4.93 | 0.20 | step 3, 2e-11 relative |
+| M0off against Z0 (switch off) | 5.39 / 5.58 | 1.1 | step 3, 5e-10 relative |
+
+- G_f (maxG) is bit-identical between M0 and ZD through step 50. The switch's own terms do not change on the moving path.
+- The moving-mesh path alone (switch off) departs from static at about 1e-10 and grows to about 1 mm by 23 s.
+- With the switch on it departs less (0.2 mm). Strictly, M0 is not round-off at 23 s, and this predates the switch.
+
+## Step 3: still-water heave decay (moored box, test 2 settings, 0.15 m/s heave kick at t = 0, 6 s)
+
+Fit of z = z0 + A e^(−ζωt) cos(ω_d t + φ) over 0.2-6 s:
+
+| Run | Equilibrium z (mm) | Period (s) | ζ | A (mm) | Against plain fine: T / ζ / A |
+|---|--:|--:|--:|--:|---|
+| Plain fine (HPF) | −16.5 | 0.798 | 0.101 | 7.13 | reference |
+| Plain medium (HPM) | −16.6 | 0.799 | 0.095 | 7.07 | +0.2 % / −6 % / −1 % |
+| Plain coarse (HP) | −8.4 | 0.806 | 0.028 | 5.55 | +1.0 % / −72 % / −22 % |
+| SWENSE zone 1.0 m (H10) | −16.7 | 0.808 | 0.050 | 5.86 | +1.3 % / −50 % / −18 % |
+| SWENSE zone 0.7 m (H07) | −16.8 | 0.799 | 0.065 | 6.42 | +0.1 % / −36 % / −10 % |
+| SWENSE zone 0.5 m (H05) | −16.8 | 0.799 | 0.093 | 7.54 | +0.1 % / **−7.5 %** / +6 % |
+| SWENSE zone 1.0 m, switch off (H10off) | −17.2 | 1.15 | (poor fit) | | irregular, beating |
+
+- **Step 3 fails.** No width is within 0.5 % in damping, whether against plain coarse or plain fine.
+- **Plain coarse is a poor reference.** Its setFields start puts the water about 9 mm high, so the box floats 8 mm high, and its damping is a quarter of plain fine's.
+- **Smaller zones come closer to plain fine.** H05 has the period within 0.1 % and the damping within 7.5 %. Plain medium is itself 6 % off fine.
+- **The switch matters for the moving box.** Without it (H10off) the decay is irregular, with a stretched second cycle.
+
+Runs (`zonefix/`): W05, W07, M0, M0off, heave/{HP, HPM, HPF, H10, H07, H05, H10off}.
