@@ -796,6 +796,13 @@ forAll(Uc.boundaryField(), patchi)
 }
 const labelList bodyPatches(bodyPatchList);
 
+// Per-step log of the smallest body-wall to zone-edge distance in cells
+// (waveProperties logZoneEdge, default off; swenseZoneEdgeLog.H)
+const bool logZoneEdge =
+    mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
+        .lookupOrDefault<Switch>("logZoneEdge", false);
+bool zoneEdgeBelow1 = false;
+
 if (incidentPressureBalance)
 {
     // V2 takes the face flux of the deltaHeld equation

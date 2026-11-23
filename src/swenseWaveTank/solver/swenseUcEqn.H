@@ -363,6 +363,11 @@
             << endl;
     }
 
+    if (logZoneEdge && plainBodyZoneID >= 0 && pimple.firstIter())
+    {
+        #include "swenseZoneEdgeLog.H"
+    }
+
     if (logZoneSource && plainBodyZoneID >= 0 && pimple.firstIter())
     {
         #include "swenseZoneSourceLog.H"
