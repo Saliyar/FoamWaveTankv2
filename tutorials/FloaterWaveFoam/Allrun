@@ -19,7 +19,7 @@ runApplication setFields
 runApplication relaxationZoneLayout
 
 # Run case
-#runApplication $(getApplication)
+runApplication $(getApplication)
 
 #PostProcessing Mooringlines - load .pvd from Mooring folder to visualise the mooring lines together
 #python3 MooringVisualizationInParaview.py
