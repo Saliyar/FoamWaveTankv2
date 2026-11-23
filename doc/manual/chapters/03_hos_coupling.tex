@@ -1,0 +1,246 @@
+\chapter{HOS coupling and currents}
+\label{ch:hos}
+
+\section{Principle}
+High-Order Spectral (HOS) solvers compute nonlinear, phase-resolved wave fields over large
+domains and long durations at a fraction of the cost of CFD. HOS-NWT models a wave tank with
+a wavemaker~\cite{ducrozet2012modified}; HOS-Ocean models a periodic open-sea
+domain~\cite{ducrozet2016hosocean}. Both write their solution as spectral modes in the file
+\file{modes\_HOS\_SWENSE.dat}.
+
+The Grid2Grid library~\cite{choi2019grid2grid} reads this file and reconstructs the free-surface
+elevation $\eta$, the velocity $\mathbf u$ and the dynamic pressure $p_d$ at any point and time.
+In \fwt{}, Grid2Grid is used as an \emph{external wave forcing} of \wtwof{}: the relaxation
+zones blend the CFD solution towards the HOS solution, exactly as they do for the algebraic wave
+theories (\wtwof{} manual, Sec.~2.7). The coupling strategy and its validation are described
+in~\cite{aliyar2022numerical}.
+
+\section{Workflow}
+\begin{enumerate}
+  \item Run HOS-NWT or HOS-Ocean for the wave condition. Keep
+        \file{modes\_HOS\_SWENSE.dat}.
+  \item Copy \file{modes\_HOS\_SWENSE.dat} into the case folder \file{constant/}.
+  \item Describe the HOS file in \file{constant/Grid2Grid.dict} (Sec.~\ref{sec:g2gdict}).
+  \item Select the HOS forcing in \file{constant/waveProperties.input}
+        (Sec.~\ref{sec:hos-setup}).
+  \item Load the libraries in \file{system/controlDict}:
+\begin{lstlisting}
+libs ( "libwaves2Foam.so" "libGrid2Grid.so" );
+\end{lstlisting}
+  \item Prepare and run the case with the usual \wtwof{} sequence:
+\begin{lstlisting}[style=shell,caption={Running an HOS-coupled case (shortened from \file{tutorials/waveFoam/Allrun}).}]
+blockMesh
+waveGaugesNProbes
+setWaveParameters
+relaxationZoneLayout
+setWaveField          # initial field from HOS at the start time
+waveFoam              # or waveIsoFoam
+\end{lstlisting}
+\end{enumerate}
+
+\NB{\app{setWaveField} initialises $\alpha$ and $\mathbf u$ from the HOS solution at the start
+time of the simulation (\kw{startTime} plus \kw{referenceTime}). It advances Grid2Grid to that
+time first, so a simulation can start at any time inside the HOS record.}
+
+\section{The Grid2Grid dictionary}
+\label{sec:g2gdict}
+\begin{lstlisting}[caption={\file{constant/Grid2Grid.dict}.},label={lst:g2gdict}]
+Grid2Grid       HOSNWT;           // name of the sub-dictionary below
+
+HOSNWT
+{
+    type                NWT;      // NWT (HOS-NWT) or Ocean (HOS-Ocean)
+    fileType            ASCII;    // ASCII or HDF5
+    filePath            constant/modes_HOS_SWENSE.dat;
+    interpolationOrder  3;        // 3: cubic spline (default)
+    zMeshType           meshRatio;// uniform, sine or meshRatio
+    zMin                -5;       // lowest z of the reconstruction grid [m]
+    zMax                20;       // highest z (above the highest crest)
+    nZMin               50;       // points below z = 0
+    nZMax               50;       // points above z = 0
+    zMinRatio           3;        // grid stretching below z = 0 (meshRatio)
+    zMaxRatio           3;        // grid stretching above z = 0 (meshRatio)
+}
+\end{lstlisting}
+Grid2Grid reconstructs the HOS field on a vertical grid between \kw{zMin} and \kw{zMax} and
+interpolates from it. \kw{zMin} must reach at least the bottom of the CFD domain and \kw{zMax}
+the top of the highest crest. With \kw{meshRatio}, the points are clustered towards $z=0$.
+The full list of options is in the Grid2Grid manual~\cite{choi2019grid2grid}.
+
+\section{Selecting the HOS forcing}
+\label{sec:hos-setup}
+\begin{lstlisting}[caption={HOS forcing in \file{constant/waveProperties.input}.},label={lst:hosprops}]
+seaLevel            0.0;
+relaxationNames     (inlet outlet);
+initializationName  inlet;
+
+externalForcing     Grid2Grid;
+
+Grid2GridCoeffs
+{
+    waveType                Grid2Grid;
+    Grid2GridInputFileName  Grid2Grid.dict;
+    referencePosition       (-16.95 -14.84 0);
+    referenceTheta          0;      // degrees
+    referenceTime           0;      // seconds
+    Tsoft                   0;      // seconds
+}
+
+inletCoeffs
+{
+    waveType        externalSource; // take the wave from externalForcing
+    relaxationZone
+    {
+        relaxationScheme Spatial;
+        relaxationShape  Rectangular;
+        relaxType        INLET;
+        startX           (-10.11 0 -5);
+        endX             (-2 0 2);
+        orientation      (1 0 0);
+    }
+}
+// outletCoeffs: the same, with relaxType OUTLET
+\end{lstlisting}
+
+The keyword \kw{externalForcing} selects the HOS wave field for the whole case; every
+relaxation zone that should follow it uses \kw{waveType externalSource}. A relaxation zone may
+also use any other \wtwof{} theory. The relaxation zone settings are those of \wtwof{}
+(\wtwof{} manual, Sec.~2.7.2).
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}l l X@{}}
+\toprule
+Keyword & Default & Meaning \\
+\midrule
+\kw{Grid2GridInputFileName} & -- (required) & Grid2Grid dictionary in \file{constant/} \\
+\kw{referencePosition} & $(0\;0\;0)$ & OpenFOAM point that coincides with the HOS origin \\
+\kw{referenceTheta} & 0 & rotation of the HOS axes about $z$, in degrees \\
+\kw{referenceTime} & 0 & HOS time at OpenFOAM time $t=0$ \\
+\kw{Tsoft} & 0 & ramp-up time of the HOS field; 0 = no ramp \\
+\bottomrule
+\end{tabularx}
+\caption{Keywords of \kw{Grid2GridCoeffs}.}
+\label{tab:g2gcoeffs}
+\end{table}
+
+\Warn{Only the keywords in Table~\ref{tab:g2gcoeffs} are read. Some older cases contain
+\kw{refTime} or \kw{refDirection}; these are ignored. Use \kw{referenceTime} to shift the HOS
+time, and \kw{referenceTheta} to rotate the HOS field.}
+
+\subsection{Mapping between OpenFOAM and HOS}
+A point $\mathbf x$ and time $t$ in OpenFOAM are mapped to the HOS coordinates as
+\begin{gather}
+  \begin{pmatrix} x_H \\ y_H \end{pmatrix} =
+  \begin{pmatrix} \cos\theta & -\sin\theta \\ \sin\theta & \cos\theta \end{pmatrix}
+  \begin{pmatrix} x - x_\mathrm{ref} \\ y - y_\mathrm{ref} \end{pmatrix},
+  \\
+  z_H = z - z_\mathrm{ref} - z_\mathrm{sea},
+  \qquad
+  t_H = t + t_\mathrm{ref},
+\end{gather}
+with $\theta = \kw{referenceTheta}$, $\mathbf x_\mathrm{ref}=\kw{referencePosition}$,
+$t_\mathrm{ref}=\kw{referenceTime}$ and $z_\mathrm{sea}=\kw{seaLevel}$. The
+returned velocity is rotated back to the OpenFOAM axes, \kw{seaLevel} is added to $\eta$, and
+the hydrostatic pressure at \kw{seaLevel} is added to $p_d$.
+
+Gravity in \file{constant/g} must point in the negative $z$ direction; otherwise the solver
+stops with an error.
+
+\subsection{Ramp-up}
+With $\kw{Tsoft}>0$, $\eta - \texttt{seaLevel}$, $\mathbf u$ and $p_d$ from HOS are multiplied by
+\begin{equation}
+  f(t) = \sin\!\left(\frac{\pi}{2}\,\frac{\min(t,\,T_\mathrm{soft})}{T_\mathrm{soft}}\right),
+\end{equation}
+which rises from 0 to 1 over the first $T_\mathrm{soft}$ seconds. A ramp is useful when the
+simulation starts from still water; when the initial field is set by \app{setWaveField}, use
+$\kw{Tsoft}=0$.
+
+\section{HOS waves with a current}
+\label{sec:hos-current}
+\kw{Grid2GridWithCurrent} adds a steady current $\mathbf U_c(z)$ to the HOS velocity. It reads
+all keywords of Table~\ref{tab:g2gcoeffs} from the same \kw{Grid2GridCoeffs} dictionary, plus
+those in Table~\ref{tab:current}.
+\begin{lstlisting}[caption={HOS waves with a depth-varying current (\file{tutorials/HOS\_with\_Current}).}]
+externalForcing     Grid2GridWithCurrent;
+
+Grid2GridCoeffs
+{
+    waveType                Grid2GridWithCurrent;
+    Grid2GridInputFileName  Grid2Grid.dict;
+    referencePosition       (-16.95 -14.84 0);
+    referenceTheta          0;
+    referenceTime           0;
+    Tsoft                   0;
+
+    profileType     depthVarying;   // constant | depthVarying | parabolic
+    Uc              (0 0 0);        // current below ZC
+    UF              (0.25 0 0);     // current at the free surface
+    ZC              -5;             // transition depth
+    currentTsoft    10;             // ramp-up time of the current
+}
+\end{lstlisting}
+The HOS wave field itself is \emph{not} modified by the current; the current is superposed on the
+HOS velocity. This is a valid model when the HOS simulation was run without current and the
+current is weak compared with the wave phase speed.
+
+\subsection{Current profiles}
+\label{sec:current-profiles}
+\begin{description}
+  \item[\kw{constant}] $\mathbf U_c = \kw{Uc}$ everywhere.
+  \item[\kw{depthVarying}] $\mathbf U_c = \kw{Uc}$ below $z = \kw{ZC}$, and a linear transition
+    to \kw{UF} at the still-water level:
+    \begin{equation}
+      \mathbf U_c(z) = (1-w)\,\mathbf U_\mathrm{c} + w\,\mathbf U_F,\qquad
+      w = \frac{z - Z_C}{\texttt{seaLevel} - Z_C},\quad z > Z_C .
+    \end{equation}
+  \item[\kw{parabolic}] a profile along $x$ with its maximum $|\mathbf U_F|$ at $z=z_0$,
+    falling to zero at $z_0 \pm H$:
+    \begin{equation}
+      U_{c,x}(z) = \max\!\left(|\mathbf U_F|\left[1 - \left(\frac{z-z_0}{H}\right)^2\right],\,0\right).
+    \end{equation}
+\end{description}
+The current is ramped up with
+$\sin\left(\frac{\pi}{2}\min(t,T_c)/T_c\right)$, $T_c=\kw{currentTsoft}$.
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}l l X@{}}
+\toprule
+Keyword & Default & Meaning \\
+\midrule
+\kw{profileType}  & \kw{constant} & \kw{constant}, \kw{depthVarying} or \kw{parabolic} \\
+\kw{Uc}           & $(0\;0\;0)$ & current below \kw{ZC} (and everywhere for \kw{constant}) \\
+\kw{UF}           & $(0\;0\;0)$ & current at the still-water level; peak value for \kw{parabolic} \\
+\kw{ZC}           & 0 & transition depth for \kw{depthVarying} \\
+\kw{currentTsoft} & 0 & ramp-up time of the current; 0 = no ramp \\
+\kw{H}            & $|\kw{ZC}|$ & half-width of the parabolic profile \\
+\kw{z0}           & $(\texttt{seaLevel}+\kw{ZC})/2$ & height of the parabolic maximum \\
+\bottomrule
+\end{tabularx}
+\caption{Current keywords of \kw{Grid2GridWithCurrent}.}
+\label{tab:current}
+\end{table}
+
+\section{Current without waves}
+\label{sec:current-only}
+The wave theory \kw{DepthvaryingCurrent} imposes only a current, with the same three profiles.
+It is used as the \kw{waveType} of a relaxation zone and is set up like any \wtwof{} theory:
+\begin{lstlisting}[caption={Current-only relaxation zone (\file{tutorials/CurrentWithProfile}).}]
+inletCoeffs
+{
+    waveType        DepthvaryingCurrent;
+    profileType     depthVarying;   // constant | depthVarying | parabolic
+    U               (0 0 0);        // current below ZC
+    UF              (1.0 0 0);      // current at the free surface
+    ZC              -5.0;
+    Tsoft           5;              // ramp-up time
+    localSeaLevel   0.0;            // default: seaLevel
+    relaxationZone { ... }
+}
+\end{lstlisting}
+\NB{In \kw{DepthvaryingCurrent} the current below \kw{ZC} is called \kw{U}, and
+\kw{profileType}, \kw{U}, \kw{UF}, \kw{ZC} and \kw{Tsoft} are required. In
+\kw{Grid2GridWithCurrent} the same quantity is called \kw{Uc}, and all current keywords have
+defaults. The profiles and the ramp are otherwise identical (Sec.~\ref{sec:current-profiles}),
+with \kw{localSeaLevel} in place of \kw{seaLevel}.}

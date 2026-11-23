@@ -1,0 +1,56 @@
+\chapter{Tutorials}
+\label{ch:tutorials}
+
+The tutorials are in \file{tutorials/}. Copy a tutorial to a working folder before running it:
+\begin{lstlisting}[style=shell]
+cp -r $WAVES_DIR/tutorials/waveIsoFoam  $FOAM_RUN/
+cd $FOAM_RUN/waveIsoFoam
+./Allrun
+\end{lstlisting}
+\file{./Allclean} returns a case to its initial state. The \wtwof{} tutorials (standing wave,
+wave flume, \ldots) are described in the \wtwof{} manual, Ch.~6.
+
+\section{HOS wave tanks: \texorpdfstring{\file{waveFoam}}{waveFoam} and \texorpdfstring{\file{waveIsoFoam}}{waveIsoFoam}}
+A wave tank forced by an HOS-NWT wave field through an inlet and an outlet
+relaxation zone (Chapter~\ref{ch:hos}). The two cases are identical except for the solver, so
+they can be used to compare MULES and isoAdvector. The \file{Allrun} script runs
+\app{blockMesh}, \app{waveGaugesNProbes}, \app{setWaveParameters},
+\app{relaxationZoneLayout}, \app{setWaveField} and the solver.
+
+\NB{The HOS file is not part of the repository. Place a \file{modes\_HOS\_SWENSE.dat} from
+HOS-NWT in \file{constant/} before running these cases, and check that \kw{zMin} and \kw{zMax}
+in \file{constant/Grid2Grid.dict} cover the CFD domain.}
+
+\section{HOS waves with current: \texorpdfstring{\file{HOS\_with\_Current}}{HOS\_with\_Current}}
+The HOS wave tank with a depth-varying current superposed on the HOS velocity
+(\kw{Grid2GridWithCurrent}, Sec.~\ref{sec:hos-current}): 0.25~m/s at the surface, zero below
+$z=-5$~m, ramped up over 10~s. It needs a \file{modes\_HOS\_SWENSE.dat} as above.
+
+\section{Current only: \texorpdfstring{\file{CurrentWithProfile}}{CurrentWithProfile}}
+A current without waves, imposed by \kw{DepthvaryingCurrent} relaxation zones
+(Sec.~\ref{sec:current-only}), run with \app{waveIsoFoam}. Change \kw{profileType} in
+\file{constant/waveProperties.input} to compare the constant, depth-varying and parabolic
+profiles. No HOS file is needed.
+
+\section{Moored floating box: \texorpdfstring{\file{FloaterWaveFoam}}{FloaterWaveFoam}}
+A box floating in regular first-order Stokes waves (height 0.12~m, period 2~s, depth 0.5~m),
+moored with MoorDyn and moved by FloatStepper (\app{floatStepperWaveIsoFoam},
+Sec.~\ref{sec:floatstepper} and Chapter~\ref{ch:moorings}). The box moves in surge, heave and
+pitch. The mooring uses MoorDyn v2 (\file{Mooring/lines\_v2\_bodyC.txt}). A MoorDyn v1
+restraint (\file{Mooring/lines.txt}) is included in \file{constant/dynamicMeshDict} but commented
+out; to try MoorDyn v1, uncomment it and comment out the \kw{moorDynR2\_body} restraint.
+
+\file{Allrun} creates the mesh, the wave parameters, the initial free surface and the relaxation
+zones, and then runs \app{floatStepperWaveIsoFoam} for 10~s of simulated time (log in
+\file{log.floatStepperWaveIsoFoam}). The body motion is written by \kw{floaterStateWriter}, the mooring lines to \file{Mooring/}.
+\file{MooringVisualizationInParaview.py} loads the mooring VTK files in ParaView.
+
+\section{Post-processing scripts}
+\file{tutorials/postProcessingScript} contains MATLAB scripts used with the HOS cases:
+\begin{description}
+  \item[\file{CouplingWaveComparison.m}] compares surface elevations from experiments, HOS and
+    \app{waveFoam}/\app{waveIsoFoam} for long-duration cases; edit the data locations at the top.
+  \item[\file{freqSpectrum.m}] one-sided Fourier coefficients and power spectral density of a
+    time series.
+  \item[\file{peak\_prob.m}] wave peaks and their exceedance probability.
+\end{description}

@@ -1,0 +1,141 @@
+\chapter{Moorings with MoorDyn}
+\label{ch:moorings}
+
+\section{Overview}
+MoorDyn is a lumped-mass mooring line model~\cite{hall2015validation}. \fwt{} couples it to the
+rigid-body motion as a \emph{restraint}: at every time step the body position and velocity are
+passed to MoorDyn, which integrates the line dynamics and returns the mooring force and moment.
+The coupling follows Chen and Hall~\cite{chen2022cfd}; its use with HOS waves is described
+in~\cite{aliyar2022numerical}.
+
+Two MoorDyn versions are built:
+\begin{description}
+  \item[MoorDyn v1] (\kw{moorDynR1}) lines between fixed anchors and fairleads on one body. Input
+    in \file{Mooring/lines.txt}. MoorDyn v1 cannot store and restore its state, so the lines are
+    advanced at most once per time step.
+  \item[MoorDyn v2] (\kw{moorDynR2}, version 2.7.2) the current MoorDyn, with bodies, rods,
+    bending stiffness, seabed friction and VTK output. Its state is saved and restored, so it
+    can be called several times per time step (outer correctors, FloatStepper test steps).
+\end{description}
+Use MoorDyn v2 for new cases. The MoorDyn input file formats are described in the MoorDyn
+documentation (\url{https://moordyn.readthedocs.io}).
+
+Both versions are available for both body-motion solvers:
+\begin{center}\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+Solvers & Restraint keyword & Library in \kw{libs} \\
+\midrule
+\app{floatStepperWaveIsoFoam}, & \kw{floaterMotionRestraint} & \file{moorDynForFloatStepper} \\
+\quad\app{floatStepper} & & \\[2pt]
+\app{waveFoam}, \app{waveIsoFoam} & \kw{sixDoFRigidBodyMotionRestraint} & \file{moorDynR1SixDoF} (v1) \\
+\quad(\kw{sixDoFRigidBodyMotion}) & & \file{moorDynR2SixDoF} (v2) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Moorings with FloatStepper}
+Add the library in \file{system/controlDict} and the restraint in the \kw{restraints}
+sub-dictionary of Code Frame~\ref{lst:fsdyn}:
+\begin{lstlisting}[caption={MoorDyn v2 restraint for FloatStepper.},label={lst:fsmoor}]
+// system/controlDict
+libs    (moorDynForFloatStepper);
+
+// constant/dynamicMeshDict, inside floaterMeshMotionSolverCoeffs
+restraints
+{
+    moorDynR2_body
+    {
+        floaterMotionRestraint  moorDynR2;
+        couplingMode    "BODY";
+        inputFile       "Mooring/lines_v2_bodyC.txt";
+        writeMooringVTK true;
+        vtkPrefix       "mdv2_body";
+        vtkStartTime    0;
+        outerCorrector  1;
+    }
+}
+\end{lstlisting}
+For MoorDyn v1, the restraint has no further entries; the lines are read from
+\file{Mooring/lines.txt}:
+\begin{lstlisting}
+moorDynR1
+{
+    floaterMotionRestraint  moorDynR1;
+}
+\end{lstlisting}
+
+\section{Moorings with \texorpdfstring{\kw{sixDoFRigidBodyMotion}}{sixDoFRigidBodyMotion}}
+\label{sec:moordyn-sixdof}
+For \app{waveFoam} and \app{waveIsoFoam}, the same restraints are available for OpenFOAM's
+\kw{sixDoFRigidBodyMotion}, so a moored body can be simulated without FloatStepper:
+\begin{lstlisting}[caption={MoorDyn v2 restraint for \kw{sixDoFRigidBodyMotion}.},label={lst:sixdofmoor}]
+// system/controlDict
+libs    ( "libwaves2Foam.so" moorDynR2SixDoF );
+
+// constant/dynamicMeshDict
+dynamicFvMesh       dynamicMotionSolverFvMesh;
+motionSolverLibs    (sixDoFRigidBodyMotion);
+motionSolver        sixDoFRigidBodyMotion;
+
+sixDoFRigidBodyMotionCoeffs
+{
+    patches         (box);
+    innerDistance   0.075;
+    outerDistance   0.4;
+    mass            3.148;
+    centreOfMass    (0 0 -0.0126);
+    momentOfInertia (0.015 0.0167 0.021);
+    accelerationRelaxation 0.4;
+    solver          { type Newmark; }
+    constraints     { ... }
+
+    restraints
+    {
+        moorDynR2_body
+        {
+            sixDoFRigidBodyMotionRestraint  moorDynR2;
+            couplingMode    "BODY";
+            inputFile       "Mooring/lines_v2_bodyC.txt";
+            writeMooringVTK true;
+            vtkPrefix       "mdv2_body";
+        }
+    }
+}
+\end{lstlisting}
+For MoorDyn v1 use \kw{sixDoFRigidBodyMotionRestraint moorDynR1;} with the library
+\file{moorDynR1SixDoF}. When the solver uses several outer correctors with
+\kw{moveMeshOuterCorrectors}, \kw{moorDynR1} returns the force of the first call in each time
+step; \kw{moorDynR2} restores the MoorDyn state and recomputes it.
+
+\section{Restraint options}
+\begin{table}[htbp]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}l l X@{}}
+\toprule
+Keyword & Default & Meaning \\
+\midrule
+\kw{inputFile}        & -- (required) & MoorDyn v2 input file, relative to the case folder \\
+\kw{couplingMode}     & -- (required) & \kw{"BODY"}: MoorDyn has one coupled body (6 degrees of freedom);
+                                        \kw{"POINT"}: MoorDyn has coupled points \\
+\kw{refAttachmentPt}  & -- & list of fairlead points, one per coupled point (\kw{POINT} only) \\
+\kw{writeMooringVTK}  & \kw{false} & write the line geometry as VTK files for ParaView \\
+\kw{vtkPrefix}        & \kw{mdV2} & file name prefix of the VTK files \\
+\kw{vtkStartTime}     & 0 & first time at which VTK files are written \\
+\kw{vtkLegacyFormat}  & (build-dependent) & legacy \file{.vtk} instead of XML VTK \\
+\kw{outerCorrector}   & 1 & outer-corrector iteration in which the VTK files are written \\
+\bottomrule
+\end{tabularx}
+\caption{Options of the \kw{moorDynR2} restraint (FloatStepper and \kw{sixDoFRigidBodyMotion}).}
+\end{table}
+
+In \kw{BODY} mode, the MoorDyn input file must define exactly one coupled body; its position is
+taken from the rigid-body motion. In \kw{POINT} mode, the number of entries in
+\kw{refAttachmentPt} must equal the number of coupled points in the MoorDyn input file.
+
+\section{Output}
+MoorDyn writes the line tensions and node positions to the \file{Mooring/} folder (MoorDyn v1:
+\file{Lines.out} and \file{Line<n>.out}; MoorDyn v2: as set in its input file). With
+\kw{writeMooringVTK true}, the lines are also written as VTK files that can be loaded in
+ParaView together with the CFD solution; \file{tutorials/FloaterWaveFoam} contains the script
+\file{MooringVisualizationInParaview.py} for this.

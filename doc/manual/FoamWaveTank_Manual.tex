@@ -1,0 +1,93 @@
+\documentclass[11pt,a4paper,oneside]{report}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[a4paper,margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage[framemethod=default]{mdframed}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage{hyperref}
+
+\hypersetup{colorlinks=true,linkcolor=blue!50!black,citecolor=green!40!black,urlcolor=blue!60!black}
+
+% ---------------------------------------------------------------- code frames
+\definecolor{codebg}{gray}{0.96}
+\lstdefinestyle{foam}{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{codebg},
+  frame=single, rulecolor=\color{gray!60},
+  columns=fullflexible, keepspaces=true,
+  breaklines=true, showstringspaces=false,
+  commentstyle=\color{green!40!black}\itshape,
+  morecomment=[l]{//},
+  captionpos=b, aboveskip=0.8em, belowskip=0.8em
+}
+\lstdefinestyle{shell}{style=foam, morecomment=[l]{\#}}
+\lstset{style=foam}
+\renewcommand{\lstlistingname}{Code Frame}
+\renewcommand{\lstlistlistingname}{Code Frames}
+
+\newmdenv[linecolor=orange!70!black,backgroundcolor=orange!6,linewidth=1pt,
+  innertopmargin=6pt,innerbottommargin=6pt]{warnbox}
+\newmdenv[linecolor=blue!60!black,backgroundcolor=blue!4,linewidth=1pt,
+  innertopmargin=6pt,innerbottommargin=6pt]{notebox}
+\newcommand{\NB}[1]{\begin{notebox}\textbf{Nota bene:} #1\end{notebox}}
+\newcommand{\Warn}[1]{\begin{warnbox}\textbf{Warning:} #1\end{warnbox}}
+
+\newcommand{\file}[1]{\texttt{#1}}
+\newcommand{\kw}[1]{\texttt{#1}}
+\newcommand{\app}[1]{\textit{#1}}
+\newcommand{\wtwof}{\textit{waves2Foam}}
+\newcommand{\fwt}{\textit{FoamWaveTank}}
+
+% long typewriter names cannot be hyphenated: allow looser lines instead of overfull ones
+\tolerance=2000
+\emergencystretch=4em
+
+\title{\Huge FoamWaveTank Manual\\[0.5em]
+  \Large HOS-coupled numerical wave tank, floating bodies and moorings\\
+  for OpenFOAM v2506 (openfoam.com)}
+\author{Sithik Aliyar\\DTU Wind and Energy Systems, Technical University of Denmark}
+\date{Version 0.1 (draft), \today}
+
+\begin{document}
+\maketitle
+
+\chapter*{About this manual}
+\addcontentsline{toc}{chapter}{About this manual}
+This manual documents what \fwt{} adds to the \wtwof{} toolbox: installation of the whole
+package, the coupling to Higher-Order Spectral (HOS) wave solvers, the \app{waveIsoFoam}
+solver, ocean currents, floating bodies with FloatStepper, and moorings with MoorDyn.
+
+Everything that \fwt{} inherits unchanged from \wtwof{} -- the relaxation zone technique,
+the algebraic wave theories, the pre- and post-processing utilities and their input files --
+is described in the \emph{waves2Foam Manual} by N.~G.~Jacobsen~\cite{jacobsen2017manual}
+and is not repeated here. Where a chapter relies on such material, it gives the section of
+that manual to read.
+
+The manual is a draft. Please report errors and unclear passages on the issue tracker of
+the \fwt{} repository.
+
+\NB{\fwt{} is not approved or endorsed by OpenCFD Limited, producer and distributor of the
+OpenFOAM software via www.openfoam.com, and owner of the OPENFOAM\textsuperscript{\textregistered}
+and OpenCFD\textsuperscript{\textregistered} trade marks.}
+
+\tableofcontents
+\lstlistoflistings
+
+\include{chapters/01_introduction}
+\include{chapters/02_installation}
+\include{chapters/03_hos_coupling}
+\include{chapters/04_solvers}
+\include{chapters/05_moorings}
+\include{chapters/06_tutorials}
+
+\bibliographystyle{unsrtnat}
+\bibliography{references}
+
+\end{document}

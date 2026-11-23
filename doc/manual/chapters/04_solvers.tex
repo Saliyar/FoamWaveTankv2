@@ -1,0 +1,193 @@
+\chapter{Solvers}
+\label{ch:solvers}
+
+All solvers read the same \wtwof{} input files (\file{constant/waveProperties}, relaxation
+zones, probes) and accept every wave theory, including the HOS forcing of Chapter~\ref{ch:hos}.
+They differ in the interface-capturing scheme and in how a floating body is moved.
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}l l l X@{}}
+\toprule
+Solver & Interface & Wave zones & Body motion \\
+\midrule
+\app{waveFoam}                & MULES       & yes & \kw{sixDoFRigidBodyMotion} \\
+\app{waveIsoFoam}             & isoAdvector & yes & \kw{sixDoFRigidBodyMotion} \\
+\app{floatStepperWaveIsoFoam} & isoAdvector & yes & FloatStepper \\
+\app{floatStepper}            & isoAdvector & no  & FloatStepper \\
+\bottomrule
+\end{tabularx}
+\caption{Solvers in \fwt{}.}
+\label{tab:solvers}
+\end{table}
+
+\section{\texorpdfstring{\app{waveFoam}}{waveFoam}}
+\app{waveFoam} is the \wtwof{} solver (\wtwof{} manual, Sec.~5.1), ported to OpenFOAM v2506
+and with the \kw{ddtCorr} switch of Sec.~\ref{sec:ddtcorr}. It supports dynamic meshes, so a
+rigid body can be moved with OpenFOAM's \kw{sixDoFRigidBodyMotion} solver, with or without
+MoorDyn moorings (Sec.~\ref{sec:moordyn-sixdof}).
+
+\section{\texorpdfstring{\app{waveIsoFoam}}{waveIsoFoam}}
+\label{sec:waveisofoam}
+\app{waveIsoFoam} is \app{waveFoam} with the volume fraction advected by the geometric
+isoAdvector scheme (as in OpenFOAM's \app{interIsoFoam}) instead of MULES. isoAdvector keeps the
+interface sharp over long wave propagation distances and is the scheme FloatStepper is built
+on. The relaxation zones are applied after the advection step, as in \app{waveFoam}.
+
+The case set-up is that of \app{waveFoam}, except for the \kw{alpha.water} entry in
+\file{system/fvSolution}:
+\begin{lstlisting}[caption={isoAdvector settings in \file{system/fvSolution} (\file{tutorials/waveIsoFoam}).}]
+"alpha.water.*"
+{
+    reconstructionScheme plicRDF;   // isoAlpha (faster) or plicRDF (more accurate)
+    isoFaceTol      1e-6;
+    surfCellTol     1e-3;
+    nAlphaBounds    3;
+    snapTol         1e-12;
+    clip            true;
+    nAlphaSubCycles 1;              // required
+    cAlpha          1;              // not used by isoAdvector
+    // MULES entries (nAlphaCorr, MULESCorr, nLimiterIter) are ignored
+}
+\end{lstlisting}
+The meaning of these entries is that of OpenFOAM's \app{interIsoFoam}. Keep the Courant number
+below about 0.5 (\kw{maxCo} and \kw{maxAlphaCo} in \file{system/controlDict}); isoAdvector is
+not stable at large Courant numbers.
+
+\section{The \texorpdfstring{\kw{ddtCorr}}{ddtCorr} switch}
+\label{sec:ddtcorr}
+In the pressure equation, OpenFOAM adds the term \kw{fvc::ddtCorr(U, phi)} to the predicted face
+flux. This Rhie--Chow-type correction for transient flows uses the difference between the face
+flux and the interpolated cell velocity of the previous time step, keeping the two consistent.
+It changes the flux near the free surface and near moving bodies, so it can be useful to test a
+case with and without it. In \fwt{}, all solvers of
+Table~\ref{tab:solvers} let this term be switched off from \file{system/fvSchemes}:
+\begin{lstlisting}[caption={The \kw{ddtCorr} switch in \file{system/fvSchemes}.}]
+ddtCorr  on;    // on (default) | off
+
+ddtSchemes
+{
+    default Euler;
+}
+\end{lstlisting}
+The entry is at the top level of \file{fvSchemes}, not inside \kw{ddtSchemes}. Without the entry,
+the term is included, which is the standard OpenFOAM behaviour. The switch is read in every
+pressure corrector, so it can be changed while the case is running.
+
+\section{Floating bodies with FloatStepper}
+\label{sec:floatstepper}
+\subsection{Method}
+FloatStepper~\cite{roenby2024robust} removes the added-mass instability of light bodies in heavy
+fluids. The force (and torque) on the body is split into an added-mass part and the rest,
+\begin{equation}
+  \mathbf F = \mathbf F_\mathrm{other} - \mathsf A\,\mathbf a
+  \quad\Rightarrow\quad
+  \mathbf a = (\mathsf M + \mathsf A)^{-1}\,\mathbf F_\mathrm{other},
+\end{equation}
+where $\mathsf M$ is the body mass matrix, $\mathsf A$ the added-mass matrix and $\mathbf a$
+the body acceleration. $\mathbf F_\mathrm{other}$ is found from a test step with zero body
+acceleration, and $\mathsf A$ is computed numerically as the force per unit acceleration. No
+outer correctors or acceleration relaxation are needed.
+
+\fwt{} contains FloatStepper as a git submodule in
+\file{applications/solvers/floatStepperWaveFoam} and builds two solvers from it:
+\begin{description}
+  \item[\app{floatStepperWaveIsoFoam}] FloatStepper with the \wtwof{} relaxation zones and wave
+    theories, including HOS. This is the solver for floating bodies in waves.
+  \item[\app{floatStepper}] the original FloatStepper solver, without relaxation zones.
+\end{description}
+Both support the \kw{ddtCorr} switch (Sec.~\ref{sec:ddtcorr}).
+
+\subsection{Case set-up}
+A FloatStepper case differs from a \kw{sixDoFRigidBodyMotion} case in four places.
+
+\paragraph{1. Solver and libraries} in \file{system/controlDict}:
+\begin{lstlisting}
+application     floatStepperWaveIsoFoam;
+libs            (moorDynForFloatStepper waveModels);  // MoorDyn coupling, if used
+\end{lstlisting}
+
+\paragraph{2. Mesh motion} in \file{constant/dynamicMeshDict}:
+\begin{lstlisting}[caption={FloatStepper mesh motion (\file{tutorials/FloaterWaveFoam}).},label={lst:fsdyn}]
+dynamicFvMesh   dynamicPointDisplacementFvMesh;
+
+solvers
+{
+    box                                 // body name, as in 0/uniform/floaters
+    {
+        motionSolverLibs ( floaterMotion );
+        motionSolver     floaterMeshMotionSolver;
+        floaterMeshMotionSolverCoeffs
+        {
+            patches         (box);
+            innerDistance   0.075;      // rigid mesh motion inside
+            outerDistance   0.4;        // no mesh motion outside
+            linDirs         (1 0 1);    // translation in x and z only
+            rotDirs         (0 1 0);    // rotation about y only
+            addedMassModel  pisoAddedMass;
+            MaddUpdateFreq  1;          // added mass every n-th time step
+            restraints
+            {
+                // e.g. MoorDyn, Chapter 5
+            }
+        }
+    }
+}
+\end{lstlisting}
+\kw{linDirs} and \kw{rotDirs} replace the \kw{constraints} of \kw{sixDoFRigidBodyMotion}; by
+default all six degrees of freedom are free. Computing the added mass is expensive;
+$\kw{MaddUpdateFreq}=n$ recomputes it only every $n$-th time step. The entries
+\kw{constraints}, \kw{solver}, \kw{accelerationRelaxation} and \kw{accelerationDamping} of
+\kw{sixDoFRigidBodyMotion} are not used. Restraints have the same syntax as in
+\kw{sixDoFRigidBodyMotion}, with \kw{sixDoFRigidBody} replaced by \kw{floater} in the class
+names (e.g.\ \kw{floaterMotionRestraint}).
+
+\paragraph{3. Body properties} in \file{0.orig/uniform/floaters}, in a dictionary with the body
+name used in \file{dynamicMeshDict}:
+\begin{lstlisting}[caption={Body properties, \file{0.orig/uniform/floaters}.}]
+box
+{
+    centreOfRotation    (0 0 -0.0126);
+    orientation         (1 0 0 0 1 0 0 0 1);
+    velocity            (0 0 0);
+    acceleration        (0 0 0);
+    angularVelocity     (0 0 0);
+    angularAcceleration (0 0 0);
+    mass                3.148;
+    centreOfMass        $centreOfRotation;
+    momentOfInertia     (0.015 0 0 0.0167 0 0.021);   // xx xy xz yy yz zz
+    initialCentreOfRotation $centreOfRotation;
+    initialOrientation      $orientation;
+    initialCentreOfMass     $initialCentreOfRotation;
+}
+\end{lstlisting}
+Mass properties given in \file{dynamicMeshDict} are not used.
+
+\paragraph{4. Velocity on the body} in \file{0.orig/U}:
+\begin{lstlisting}
+box
+{
+    type    floaterVelocity;
+    slip    true;            // default: no-slip
+    value   uniform (0 0 0);
+}
+\end{lstlisting}
+
+\subsection{Output}
+The body motion is written by the \kw{floaterStateWriter} function object:
+\begin{lstlisting}[caption={Writing the body motion (\file{system/controlDict}).}]
+functions
+{
+    floaterMotion
+    {
+        type            floaterStateWriter;
+        libs            (floaterStateWriter);
+        writeControl    timeStep;
+        writeInterval   1;
+        bodyName        box;
+    }
+}
+\end{lstlisting}
+
+\Warn{FloatStepper supports one rigid body, a morphing mesh (no overset) and the isoAdvector
+interface scheme. See the FloatStepper README for further details and limitations.}

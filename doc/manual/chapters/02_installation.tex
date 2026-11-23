@@ -1,0 +1,116 @@
+\chapter{Installation}
+\label{ch:install}
+
+\section{Requirements}
+\begin{itemize}
+  \item \textbf{OpenFOAM v2506} from openfoam.com (the ESI/OpenCFD version). The
+        openfoam.org versions (OpenFOAM-11, -12, \ldots) are \emph{not} supported.
+  \item C, C++ and Fortran compilers, \kw{make}, CMake and git.
+  \item FFTW3 (the static library \file{libfftw3.a} must be present) and GSL.
+  \item Linux: Ubuntu or Debian (also Windows Subsystem for Linux), RHEL, Rocky or Fedora,
+        or an HPC cluster with environment modules.
+\end{itemize}
+\wtwof{}, Grid2Grid, FloatStepper and MoorDyn are part of the repository or are downloaded
+by the build script; they need no separate installation. HOS-NWT or HOS-Ocean are needed
+only to generate new HOS wave fields (Chapter~\ref{ch:hos}).
+
+\section{Installing}
+\begin{lstlisting}[style=shell,caption={Installing FoamWaveTank.},label={lst:install}]
+# 1. Load OpenFOAM v2506 in the terminal
+source /usr/lib/openfoam/openfoam2506/etc/bashrc   # Ubuntu/WSL package
+# module load openfoam.com/2506                     # HPC cluster (names differ)
+
+# 2. Get the code
+git clone https://github.com/Saliyar/FoamWaveTankv2.git
+cd FoamWaveTankv2
+
+# 3. Compile (10-20 minutes)
+./Allwmake
+\end{lstlisting}
+
+The solvers and libraries are installed in \file{\$FOAM\_USER\_APPBIN} and
+\file{\$FOAM\_USER\_LIBBIN}, so they are found by OpenFOAM without further settings.
+
+\section{What \texttt{./Allwmake} does}
+\subsection{Prerequisite check}
+Before compiling anything, \file{Allwmake} determines the platform:
+\begin{description}
+  \item[server] an HPC cluster with environment modules (the \kw{module} command exists);
+  \item[ubuntu] Ubuntu or Debian, including WSL;
+  \item[rhel] RHEL, Rocky, CentOS or Fedora;
+  \item[other] anything else.
+\end{description}
+It then checks for the compilers, \kw{make}, CMake, git, FFTW (\file{libfftw3.a}), GSL (by
+compiling and linking a small test program) and a loaded OpenFOAM v2506. On a cluster it
+first tries to load an FFTW module itself.
+
+If something is missing, \emph{nothing is compiled}. The script lists what is missing and
+prints the command that installs it for the detected platform. On Ubuntu it also offers to run
+that command:
+\begin{lstlisting}[style=shell,caption={Typical output on a fresh Ubuntu installation.}]
+Platform: ubuntu  (ubuntu)
+MISSING: gcc g++ make gfortran cmake git FFTW(libfftw3.a) GSL OpenFOAM(not loaded)
+
+  sudo apt update && sudo apt install -y build-essential gfortran cmake git \
+       libfftw3-dev libgsl-dev
+Install these packages now with sudo apt? [y/N]
+\end{lstlisting}
+If OpenFOAM is installed but not loaded, the script names the \file{etc/bashrc} file to
+source. If it is not installed at all, on Ubuntu it prints the commands that install
+OpenFOAM v2506 from the openfoam.com package repository:
+\begin{lstlisting}[style=shell,caption={Installing OpenFOAM v2506 on Ubuntu or WSL.}]
+curl -s https://dl.openfoam.com/add-debian-repo.sh | sudo bash
+sudo apt install -y openfoam2506-default
+source /usr/lib/openfoam/openfoam2506/etc/bashrc
+\end{lstlisting}
+Install what is listed and run \file{./Allwmake} again.
+
+\subsection{Build}
+When all prerequisites are found, \file{Allwmake}
+\begin{enumerate}
+  \item creates \file{bin/bashrc} from \file{bin/bashrc.org} if it does not exist and sources
+        it; \kw{WAVES\_DIR} is set to the repository folder automatically;
+  \item fetches the FloatStepper submodule;
+  \item builds Grid2Grid with CMake and FFTW (\file{ThirdParty/});
+  \item builds the \wtwof{} libraries, including the HOS and current theories;
+  \item builds the solvers and utilities;
+  \item builds FloatStepper, MoorDyn v1 and v2, and the MoorDyn restraints for
+        \kw{sixDoFRigidBodyMotion}.
+\end{enumerate}
+
+\subsection{Result check}
+At the end \file{Allwmake} checks that the solvers (\app{waveFoam}, \app{waveIsoFoam},
+\app{floatStepper}, \app{floatStepperWaveIsoFoam}), the main utilities and the libraries
+(\file{libwaves2Foam}, \file{libGrid2Grid}, \file{libmoordyn\_v1}, \file{libmoordyn},
+\file{libmoorDynR1SixDoF}, \file{libmoorDynR2SixDoF}) exist. It ends with either
+\begin{lstlisting}[style=shell]
+COMPILATION DONE
+    All solvers and libraries are in <FOAM_USER_APPBIN> and <FOAM_USER_LIBBIN>
+\end{lstlisting}
+or with \kw{COMPILATION FAILED} and the list of parts that were not built. In that case,
+search the build log for the first line containing \kw{error}. The exit status of
+\file{Allwmake} is non-zero when the build failed, so it can be used in scripts.
+
+\section{Updating}
+Bug fixes are pushed to the \kw{master} branch. To update:
+\begin{lstlisting}[style=shell,caption={Updating an existing installation.}]
+cd FoamWaveTankv2
+git pull
+./Allwmake
+\end{lstlisting}
+\file{Allwmake} also updates FloatStepper to its latest version. \file{./Allwclean} removes all
+build files if a completely fresh build is needed.
+
+\section{Troubleshooting}
+\begin{description}
+  \item[``OpenFOAM v2506 is not loaded''] Source the OpenFOAM \file{etc/bashrc} in the same
+    terminal before \file{./Allwmake} (Code Frame~\ref{lst:install}).
+  \item[Wrong OpenFOAM flavour] If the script reports an openfoam.org version, install
+    OpenFOAM v2506 from openfoam.com.
+  \item[FFTW not found] Install the development package (\kw{libfftw3-dev} on Ubuntu,
+    \kw{fftw-devel} and \kw{fftw-static} on RHEL) or load an FFTW module on a cluster. A
+    custom FFTW can be used by setting \kw{USER\_FFTW3\_LIB\_PATH="<folder with libfftw3.a>"}
+    near the top of \file{Allwmake}.
+  \item[Solver not found after building] Open a new terminal, source OpenFOAM, and check that
+    \kw{\$FOAM\_USER\_APPBIN} is the folder reported by \file{Allwmake}.
+\end{description}

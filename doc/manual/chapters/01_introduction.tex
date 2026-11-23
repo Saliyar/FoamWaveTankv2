@@ -1,0 +1,91 @@
+\chapter{Introduction}
+\label{ch:intro}
+
+\section{What FoamWaveTank is}
+\fwt{} is a numerical wave tank for OpenFOAM v2506 (openfoam.com) built on top of the
+\wtwof{} toolbox~\cite{jacobsen2012wave}. It keeps the \wtwof{} relaxation zones, wave
+theories and utilities, and adds:
+\begin{itemize}
+  \item coupling to the Higher-Order Spectral (HOS) wave solvers HOS-NWT and HOS-Ocean
+        through the Grid2Grid library~\cite{choi2019grid2grid,aliyar2022numerical}, so that
+        nonlinear, phase-resolved wave fields from HOS can be imposed in the CFD domain
+        (Chapter~\ref{ch:hos});
+  \item ocean currents, alone or superposed on the HOS waves, with constant, depth-varying
+        or parabolic profiles;
+  \item the \app{waveIsoFoam} solver, which uses the geometric isoAdvector interface
+        scheme instead of MULES (Chapter~\ref{ch:solvers});
+  \item floating bodies with FloatStepper~\cite{roenby2024robust}, through the solvers
+        \app{floatStepper} and \app{floatStepperWaveIsoFoam};
+  \item moorings with MoorDyn~\cite{hall2015validation,chen2022cfd}, both for FloatStepper and
+        for OpenFOAM's own \kw{sixDoFRigidBodyMotion} solver;
+  \item an installation script that checks the computer it runs on, reports missing
+        prerequisites and verifies the result (Chapter~\ref{ch:install}).
+\end{itemize}
+
+\section{Components}
+Table~\ref{tab:components} lists the applications and libraries built by \file{./Allwmake}
+and where they are documented.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabularx}{\linewidth}{@{}l X l@{}}
+\toprule
+Name & Purpose & Documented in \\
+\midrule
+\multicolumn{3}{@{}l}{\emph{Solvers}}\\
+\app{waveFoam}                & \wtwof{} solver (MULES) with \kw{ddtCorr} switch & Sec.~\ref{sec:ddtcorr}; \wtwof{} 5.1 \\
+\app{waveIsoFoam}             & \app{waveFoam} with isoAdvector & Sec.~\ref{sec:waveisofoam} \\
+\app{floatStepperWaveIsoFoam} & FloatStepper with relaxation zones & Sec.~\ref{sec:floatstepper} \\
+\app{floatStepper}            & FloatStepper, no relaxation zones & Sec.~\ref{sec:floatstepper} \\
+\midrule
+\multicolumn{3}{@{}l}{\emph{Wave and current theories (in \file{libwaves2Foam})}}\\
+\kw{Grid2Grid}            & HOS wave field & Sec.~\ref{sec:hos-setup} \\
+\kw{Grid2GridWithCurrent} & HOS wave field plus current & Sec.~\ref{sec:hos-current} \\
+\kw{DepthvaryingCurrent}  & current only & Sec.~\ref{sec:current-only} \\
+\midrule
+\multicolumn{3}{@{}l}{\emph{Libraries}}\\
+\file{libGrid2Grid}       & HOS wrapper (Fortran) & \cite{choi2019grid2grid} \\
+\file{libmoordyn\_v1}     & MoorDyn v1 & Ch.~\ref{ch:moorings} \\
+\file{libmoordyn}         & MoorDyn v2 & Ch.~\ref{ch:moorings} \\
+\file{libmoorDynForFloatStepper} & MoorDyn restraints for FloatStepper & Ch.~\ref{ch:moorings} \\
+\file{libmoorDynR1SixDoF} & MoorDyn v1 restraint for \kw{sixDoFRigidBodyMotion} & Sec.~\ref{sec:moordyn-sixdof} \\
+\file{libmoorDynR2SixDoF} & MoorDyn v2 restraint for \kw{sixDoFRigidBodyMotion} & Sec.~\ref{sec:moordyn-sixdof} \\
+\midrule
+\multicolumn{3}{@{}l}{\emph{Utilities}}\\
+\app{setWaveField}, \app{setWaveParameters}, \ldots & from \wtwof{} & \wtwof{} Ch.~3 \\
+\bottomrule
+\end{tabularx}
+\caption{Applications and libraries built by \file{./Allwmake}.}
+\label{tab:components}
+\end{table}
+
+\section{Directory layout}
+\begin{lstlisting}[style=shell,caption={Top level of the repository.}]
+FoamWaveTankv2/
+  Allwmake, Allwclean      build / clean everything
+  bin/bashrc               environment (created from bin/bashrc.org)
+  src/                     waves2Foam libraries, incl. the HOS and current theories,
+                           and src/moorDynSixDoF (MoorDyn restraints)
+  applications/solvers/    waveFoam, waveIsoFoam,
+                           floatStepperWaveFoam/ (FloatStepper, git submodule)
+  applications/utilities/  waves2Foam pre- and post-processing utilities
+  ThirdParty/              Grid2Grid (HOS wrapper), fenton4Foam
+  tutorials/               example cases (Chapter "Tutorials")
+  doc/manual/              this manual
+\end{lstlisting}
+
+\section{How to cite}
+\label{sec:cite}
+If you use \fwt{}, please cite the HOS--OpenFOAM--MoorDyn coupling
+paper~\cite{aliyar2022numerical} and \wtwof{}~\cite{jacobsen2012wave}. In addition, cite
+\begin{itemize}
+  \item FloatStepper~\cite{roenby2024robust} when you use \app{floatStepper} or
+        \app{floatStepperWaveIsoFoam};
+  \item MoorDyn~\cite{hall2015validation} and its OpenFOAM coupling~\cite{chen2022cfd} when
+        you use moorings;
+  \item HOS-NWT~\cite{ducrozet2012modified} or HOS-Ocean~\cite{ducrozet2016hosocean}, and
+        Grid2Grid~\cite{choi2019grid2grid}, when you use HOS wave fields.
+\end{itemize}
+The file \file{CITATION.cff} in the repository holds the same references; GitHub shows them
+under ``Cite this repository''.
