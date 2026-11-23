@@ -292,3 +292,57 @@ The band G_f per column is the largest-|.| vertical face value in the band, sign
 - **pDyn is not the cause.** It is the smallest pressure term (rms 145-171), the slope is about 0.05 rather than 1, and R² is 0.02-0.23.
 - **Dominant term: unbalanced incident inertia.** ddt + conv (rms 339 / 578) is balanced only partly by the lateral hydrostatic pressure of the discrete alphaI surface (pHyd + gravity, 292 / 576), and pDyn takes off little more.
 - In B05 the residual is mainly horizontal (x 379 against z 119) and sits where alphaI is 16 mm (mean) off the HOS surface. The analytic acceleration follows the HOS surface, while the hydrostatic slope follows the advected alphaI.
+
+# alphaI drift at the box wall (no solver run), 23 Nov 2026
+
+## 1. Code
+
+- **alphaI on the box is zeroGradient** (`zonefix/B05/0.orig/alphaI`, patch box), so its face value is the wall cell's own alphaI.
+- **The incident flux through the box wall is not zero.**
+  - The raw flux is `phiRaw = UfInc & Sf` ([swenseIncidentStep.H:19](../src/swenseWaveTank/solver/swenseIncidentStep.H#L19)). UfInc on boundary faces is the blended incident velocity at the face centre ([swenseIncident.C:935-943](../src/swenseWaveTank/swenseIncident.C#L935-L943)).
+  - psiProj is zeroGradient on every patch except the atmosphere ([swenseSetup.H:394-405](../src/swenseWaveTank/solver/swenseSetup.H#L394-L405)), so the projection flux on the box is 0 and `phiInc_box = phiRaw_box`.
+  - `phiIRel = phiInc - meshPhi` ([swenseIncidentStep.H:57](../src/swenseWaveTank/solver/swenseIncidentStep.H#L57)) therefore carries the incident wave through the wall, as if there were no body.
+- **exactWallFlux does not change this.** It only sets Uc on the box so that phiComp + phiInc = meshPhi ([swenseBodyVelocityFvPatchVectorField.C:121-137](../src/swenseWaveTank/fvPatchFields/swenseBodyVelocity/swenseBodyVelocityFvPatchVectorField.C#L121-L137)). phiInc and phiIRel are unchanged.
+- **Where phiIRel flows from the wall into the fluid**, alphaI is advected by `advectorI(alphaI, phiIRel, UInc)` (createSolverFields.H:7; alphaStep.H:14-19).
+  - isoAdvector starts every face from `upwind(phi).flux(alpha)*dt` (OpenFOAM isoAdvectionTemplates.C:456). On a boundary face that uses the patch value, which is the cell's own alphaI because the patch is zeroGradient.
+  - The isoface correction is applied only to outflow boundary faces (`phiP >= 0`, isoAdvection.C:383).
+  - So the wall imports alphaI equal to the cell's own value on inflow and exports through the isoface on outflow: **the box wall acts as a source and sink of alphaI.**
+
+## 2. Fixed box against moving box: etaHOS − etaI next to the box
+
+- **Fixed:** S6a_rev1 (Rev1, box locked by point and orientation constraints, meshPhi uniform 0, HOS wave). Box |x| < 0.234; samples 0.02-0.30 m from each box face. Script diag/eta_wall_x.py.
+- **Moving:** B05 (columns within 0.3 m of the box). Script diag/eta_wall.py.
+
+| Run | t (s) | Next to box, rms (mm) | Mean (mm) | Mean, x < box / x > box (mm) | Control x = ±1 (mm) |
+|---|--:|--:|--:|--:|--:|
+| S6a, fixed | 8.0 | 0.7 | −0.6 | −0.6 / −0.5 | +0.7 / +0.9 |
+| S6a, fixed | 15.0 | 2.1 | −0.2 | −0.7 / +0.2 | −1.2 / +2.6 |
+| S6a, fixed | 19.0 | 8.5 | +7.3 | +4.6 / +10.0 | −0.8 / +6.3 |
+| S6a, fixed | 23.0 | 13.1 | +11.6 | +6.0 / +17.2 | −2.5 / −0.2 |
+| B05, moving | 15 | 12.3 | −11.1 | −8 / −16 | rms 4.8 |
+| B05, moving | 19 | 18.5 | −16.2 | −10 / −27 | rms 4.4 |
+| B05, moving | 22.9 | 24.3 | −19.8 | −9 / −37 | rms 5.1 |
+
+**Verdict: (a) the wall boundary.**
+- The drift also grows with the box fixed: S6a rms 0.7 → 13 mm next to the box, while the controls stay at or below 6 mm. It is largest on the side x > box in both runs.
+- The moving mesh roughly doubles it (B05 24 mm against S6a 13 mm at 23 s), but it is not the origin.
+- The sign differs between the runs (S6a alphaI below HOS, B05 above). S6a is a different wave (HOS) and a different box.
+
+## 3. B05 per-column alphaI budget over one period (diag/wall_budget.py)
+
+- **Wall flux** = Σ over box faces of −alphaI_cell·(UInc_b·Sf − meshPhi_b), trapezoid over the 0.1 s writes.
+- **Total** = Δ Σ alphaI V. **Internal** = total − wall.
+- Values are given as level over one column (0.05 × 0.2 m), in mm per period.
+
+| Column (set-up x) | 15-17 s: total / wall / internal | 19-21 s: total / wall / internal |
+|---|---|---|
+| −0.125, side, x < box | +2.2 / −120.5 / +122.7 | +1.1 / −110.2 / +111.2 |
+| −0.075, over/under box | +4.5 / +8.4 / −3.9 | +3.3 / +10.7 / −7.4 |
+| −0.025, over/under box | +4.1 / +3.2 / +0.9 | +2.5 / +5.1 / −2.6 |
+| +0.025, over/under box | +3.7 / −2.0 / +5.7 | +1.8 / −0.4 / +2.2 |
+| +0.075, over/under box | +3.3 / −7.1 / +10.4 | +1.0 / −6.0 / +6.9 |
+| +0.125, side, x > box | +5.8 / +164.2 / −158.4 | +4.6 / +153.5 / −148.9 |
+
+- The wall faces carry the incident wave's net mass transport through the box: 110-160 mm of level per period, out on the side x < box and in on the side x > box. The internal faces pass almost all of it on.
+- What remains is a gain of 1-6 mm per period in every column next to the box. That is the size of the drift growth (B05 side x > box: −16 → −37 mm in 4 periods).
+- The wall flux uses the cell alphaI, not isoAdvector's isoface value on outflow faces, so the split is an estimate. The totals are exact from the fields.
