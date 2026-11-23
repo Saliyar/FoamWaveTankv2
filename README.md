@@ -22,41 +22,49 @@ The framework leverages the **Grid2Grid** methodology for consistent interpolati
 
 ## Requirements
 
-* **OpenFOAM (.com version)** (validated for versions ≥ v2024)
-* **waves2Foam framework**
-* **Grid2Grid library/toolbox**
-* Linux-based environment (recommended)
+* **OpenFOAM v2506 (openfoam.com / ESI version)**. The openfoam.org versions are not supported.
+* A C/C++/Fortran compiler, make, CMake, git, FFTW3 and GSL.
+* Linux: Ubuntu/Debian (also WSL on Windows), RHEL/Rocky/Fedora, or an HPC server with environment modules.
+
+waves2Foam, Grid2Grid, MoorDyn and FloatStepper are included and compiled by `./Allwmake`.
+HOS-NWT ([repository](https://gitlab.com/lheea/HOS-NWT)) is only needed to generate your own HOS wave fields.
 
 ---
 
 ## Installation
-> **Note:** Before installing FoamWaveTankv2, make sure you have the following dependencies installed:
-> 
-> - **HOS-NWT (Higher-Order Spectral Nonlinear Wave Toolkit)**  
->   GitHub / documentation: [HOS-NWT Repository](https://gitlab.com/lheea/HOS-NWT)
-> 
-> - **Grid2Grid (Grid-to-Grid interpolation toolbox)**  
->   GitHub / documentation: [Grid2Grid Repository](https://gitlab.com/lheea/Grid2Grid)
 
 ```bash
-## Step 0: Load required modules (If you are in Server/install these libraries)
-module load OpenFoam/v2206/gcc-11.4.0-binutils-2.40-openmpi-4.1.6
-module load fftw/3.310
+## Step 1: Load OpenFOAM v2506 in your terminal
+source /usr/lib/openfoam/openfoam2506/etc/bashrc     # Ubuntu/WSL package install
+# module load openfoam.com/2506                       # HPC server (module names differ per cluster)
 
-## Step 1: Clone the repository
+## Step 2: Clone the repository
 git clone https://github.com/Saliyar/FoamWaveTankv2.git
 cd FoamWaveTankv2
 
-## Step 2: Edit bin/bashrc to set WAVES_DIR
-# This will open nano; update WAVES_DIR to your FoamWaveTankv2 path, save and exit
-nano bin/bashrc
-
-## Step 3: Update Grid2Grid FFTW path (Update with your path)
-sed -i 's|set(FFTW3_LIB_PATH  .*|set(FFTW3_LIB_PATH  /appl9/fftw/3.3.10/XeonE5-2660v3/gcc-13.3.0/lib)|' Grid2Grid/Grid2GridOptions.cmake
-
-## Step 4: Compile
+## Step 3: Compile (about 10 minutes)
 ./Allwmake
-   ```
+```
+
+`./Allwmake` first detects where it is running (HPC server, Ubuntu/Debian or RHEL-type Linux) and checks
+the prerequisites. If something is missing it compiles nothing, lists what is missing and prints the
+command that installs it, for example on Ubuntu:
+
+```bash
+sudo apt update && sudo apt install -y build-essential gfortran cmake git libfftw3-dev libgsl-dev
+```
+
+(On Ubuntu it offers to run this for you.) If OpenFOAM v2506 is not installed yet, it prints the install
+commands as well:
+
+```bash
+curl -s https://dl.openfoam.com/add-debian-repo.sh | sudo bash
+sudo apt install -y openfoam2506-default
+```
+
+Install what it asks for, then run `./Allwmake` again. The build ends with `COMPILATION DONE` and lists
+where the solvers and libraries were installed (`$FOAM_USER_APPBIN`, `$FOAM_USER_LIBBIN`), or with
+`COMPILATION FAILED` and the names of the parts that did not build.
 
 ---
 

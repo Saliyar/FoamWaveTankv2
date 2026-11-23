@@ -358,19 +358,19 @@ do
         then
             if [ "$WM_PROJECT_VERSION_NUMBER" -lt 1706 ]
             then
-                ln -s -f $i/Make/options.OpenFOAM $i/Make/options
+                ln -s -f options.OpenFOAM $i/Make/options
             else
-                ln -s -f $i/Make/options.OpenFOAMPlus1706 $i/Make/options
+                ln -s -f options.OpenFOAMPlus1706 $i/Make/options
             fi
         else
-            ln -s -f $i/Make/options.OpenFOAM $i/Make/options
+            ln -s -f options.OpenFOAM $i/Make/options
         fi
     else
         if [ "$WM_PROJECT_VERSION_NUMBER" -lt 320 ]
         then
-            ln -s -f $i/Make/options.foam $i/Make/options
+            ln -s -f options.foam $i/Make/options
         else
-            ln -s -f $i/Make/options.foam.320 $i/Make/options
+            ln -s -f options.foam.320 $i/Make/options
         fi
     fi
 done
@@ -381,18 +381,18 @@ if [ "$OFPLUSBRANCH" -eq "1" ]
 then
     if [ "$WM_PROJECT_VERSION_NUMBER" -lt 1812 ]
     then
-        ln -s -f $WAVES_PRE/setWaveField/Make/optionsNonGABC $WAVES_PRE/setWaveField/Make/options
+        ln -s -f optionsNonGABC $WAVES_PRE/setWaveField/Make/options
     elif [ "$WM_PROJECT_VERSION_NUMBER" -lt 2012 ]
     then
-        ln -s -f $WAVES_PRE/setWaveField/Make/optionsPre2012 $WAVES_PRE/setWaveField/Make/options
+        ln -s -f optionsPre2012 $WAVES_PRE/setWaveField/Make/options
     elif [ "$WM_PROJECT_VERSION_NUMBER" -lt 2606 ]
     then
-        ln -s -f $WAVES_PRE/setWaveField/Make/options2012 $WAVES_PRE/setWaveField/Make/options
+        ln -s -f options2012 $WAVES_PRE/setWaveField/Make/options
     else
-        ln -s -f $WAVES_PRE/setWaveField/Make/optionsNonGABC $WAVES_PRE/setWaveField/Make/options
+        ln -s -f optionsNonGABC $WAVES_PRE/setWaveField/Make/options
     fi
 else
-    ln -s -f $WAVES_PRE/setWaveField/Make/optionsNonGABC $WAVES_PRE/setWaveField/Make/options
+    ln -s -f optionsNonGABC $WAVES_PRE/setWaveField/Make/options
 fi
 
 ( cd $WAVES_PRE && wmake all )
@@ -406,15 +406,15 @@ fi
 # 
 # if [ "$EXTBRANCH" -eq "1" ]
 # then
-#     ln -s -f $WAVES_POST/surfaceElevation/Make/options.210 $WAVES_POST/surfaceElevation/Make/options
+#     ln -s -f options.210 $WAVES_POST/surfaceElevation/Make/options
 # elif [ "$OFPLUSBRANCH" -eq "1" ]
 # then
-#     ln -s -f $WAVES_POST/surfaceElevation/Make/options.220 $WAVES_POST/surfaceElevation/Make/options
+#     ln -s -f options.220 $WAVES_POST/surfaceElevation/Make/options
 # elif [ "$WM_PROJECT_VERSION_NUMBER" -lt "220" ]
 # then
-#     ln -s -f $WAVES_POST/surfaceElevation/Make/options.210 $WAVES_POST/surfaceElevation/Make/options
+#     ln -s -f options.210 $WAVES_POST/surfaceElevation/Make/options
 # else
-#     ln -s -f $WAVES_POST/surfaceElevation/Make/options.220 $WAVES_POST/surfaceElevation/Make/options
+#     ln -s -f options.220 $WAVES_POST/surfaceElevation/Make/options
 # fi
 # 
 # Currently, only compile waves2FoamSampling for all Openfoam versions except
