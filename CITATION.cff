@@ -1,0 +1,33 @@
+cff-version: 1.2.0
+message: "If you use FoamWaveTankv2 in your work, please cite it as below."
+title: "FoamWaveTankv2: HOS-coupled numerical wave tank for OpenFOAM"
+type: software
+authors:
+  - family-names: Aliyar
+    given-names: Sithik
+    affiliation: "DTU Wind and Energy Systems, Technical University of Denmark"
+repository-code: "https://github.com/Saliyar/FoamWaveTankv2"
+license: GPL-3.0-or-later
+keywords:
+  - OpenFOAM
+  - waves2Foam
+  - higher-order spectral method
+  - numerical wave tank
+  - wave-structure interaction
+references:
+  - type: article
+    title: "A wave generation toolbox for the open-source CFD library: OpenFoam"
+    authors:
+      - family-names: Jacobsen
+        given-names: Niels Gjøl
+      - family-names: Fuhrman
+        given-names: David R.
+      - family-names: Fredsøe
+        given-names: Jørgen
+    journal: "International Journal for Numerical Methods in Fluids"
+    volume: 70
+    issue: 9
+    start: 1073
+    end: 1088
+    year: 2012
+    doi: "10.1002/fld.2726"

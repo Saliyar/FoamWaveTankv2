@@ -12,3 +12,6 @@ Make/.*
 *.so
 **/constant/modes_HOS_SWENSE.dat
 applications/solvers/waveIsoGoam/
+
+# Core dumps
+core.[0-9]*

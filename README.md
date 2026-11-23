@@ -110,13 +110,29 @@ Please feel free to open an issue or submit a pull request.
 
 ## Citation
 
-If you use this work in your research, please consider citing the associated publication (to be added).
+If you use FoamWaveTankv2 in your work, please cite it. GitHub shows the reference under
+**"Cite this repository"** (from [CITATION.cff](CITATION.cff)); a journal reference will be added here
+when available.
+
+FoamWaveTankv2 builds on **waves2Foam**; please also cite:
+
+> N. G. Jacobsen, D. R. Fuhrman, J. Fredsøe (2012). A wave generation toolbox for the open-source CFD
+> library: OpenFoam®. *International Journal for Numerical Methods in Fluids*, 70(9), 1073–1088.
+> https://doi.org/10.1002/fld.2726
+
+and, when using HOS wave fields, [HOS-NWT](https://gitlab.com/lheea/HOS-NWT) and
+[Grid2Grid](https://gitlab.com/lheea/Grid2Grid) as described in their repositories.
 
 ---
 
 ## License
 
-(To be specified)
+FoamWaveTankv2 is free software, released under the **GNU General Public License v3.0 or later**
+(see [LICENSE](LICENSE)), the same license family as OpenFOAM and waves2Foam on which it is built.
+Third-party components (waves2Foam, Grid2Grid, MoorDyn, FloatStepper) keep their own licenses.
+
+This offering is not approved or endorsed by OpenCFD Limited, producer and distributor of the OpenFOAM
+software via www.openfoam.com, and owner of the OPENFOAM® and OpenCFD® trade marks.
 
 ---
 
