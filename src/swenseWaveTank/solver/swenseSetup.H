@@ -482,6 +482,82 @@ if (plainBodyZoneName != "none")
         << " cells with lam = 0" << endl;
 }
 
+// Edge of the body zone (waveProperties plainBodyZoneEdge, default min):
+//   min  : lam_f = min of owner and neighbour (zone-edge faces get lam_f = 0)
+//   max  : lam_f = max on the zone-edge faces (edge faces keep lam_f = 1)
+//   ramp : lam rises 0 -> 1 over plainBodyZoneRampCells cell layers outside
+//          the zone (layer k: lam = k/(N+1)); lam_f = min as before
+const word plainBodyZoneEdge =
+    mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
+        .lookupOrDefault<word>("plainBodyZoneEdge", "min");
+
+const label plainBodyZoneRampCells =
+    mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
+        .lookupOrDefault<label>("plainBodyZoneRampCells", 3);
+
+if
+(
+    plainBodyZoneEdge != "min" && plainBodyZoneEdge != "max"
+ && plainBodyZoneEdge != "ramp"
+)
+{
+    FatalErrorInFunction
+        << "plainBodyZoneEdge must be min, max or ramp, not "
+        << plainBodyZoneEdge << exit(FatalError);
+}
+
+// Topological layer of each cell from the zone: 0 in the zone, k for the
+// k-th face-neighbour layer outside, labelMax beyond (serial: cellCells)
+labelList zoneLayer(mesh.nCells(), labelMax);
+
+if (plainBodyZoneID >= 0)
+{
+    labelList front(mesh.cellZones()[plainBodyZoneID]);
+
+    for (const label c : front)
+    {
+        zoneLayer[c] = 0;
+    }
+
+    for (label k = 1; k <= max(plainBodyZoneRampCells, label(4)); ++k)
+    {
+        DynamicList<label> next;
+
+        for (const label c : front)
+        {
+            for (const label n : mesh.cellCells()[c])
+            {
+                if (zoneLayer[n] == labelMax)
+                {
+                    zoneLayer[n] = k;
+                    next.append(n);
+                }
+            }
+        }
+
+        front.transfer(next);
+    }
+
+    Info<< "SWENSE plainBodyZoneEdge " << plainBodyZoneEdge;
+    if (plainBodyZoneEdge == "ramp")
+    {
+        Info<< " over " << plainBodyZoneRampCells << " cells";
+    }
+    Info<< endl;
+}
+
+// Per-step log of the zone source split (waveProperties logZoneSource,
+// default off): max water |Uc| outside the zone and, around that cell, the
+// cell closure (1-lam) rI_c, the face term R[(1-lam_f) G_f] and the rest of
+// the incident term. Logging only.
+const bool logZoneSource =
+    mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
+        .lookupOrDefault<Switch>("logZoneSource", false);
+scalar zoneSourceThreshold =
+    mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
+        .lookupOrDefault<scalar>("zoneSourceThreshold", 0.05);
+bool zoneSourceCrossed = false;
+
 // Column level correction of the incident surface (controlDict
 // levelCorrection, default off; swenseColumnLevel.H, called after the
 // relaxation in swenseAlphaRelax.H). With plainBodyZone or a moving mesh it

@@ -142,11 +142,41 @@
 
                 lam[c] = 0.0;
             }
+
+            // Ramp outside the zone (plainBodyZoneEdge ramp)
+            if (plainBodyZoneEdge == "ramp")
+            {
+                const scalar N1 = scalar(plainBodyZoneRampCells + 1);
+
+                forAll(lam, c)
+                {
+                    const label k = zoneLayer[c];
+
+                    if (k > 0 && k <= plainBodyZoneRampCells)
+                    {
+                        lam[c] = min(lam[c], scalar(k)/N1);
+                    }
+                }
+            }
         }
 
         for (label f = 0; f < mesh.nInternalFaces(); ++f)
         {
-            lamf[f] = min(lam[mesh.owner()[f]], lam[mesh.neighbour()[f]]);
+            const label o = mesh.owner()[f];
+            const label n = mesh.neighbour()[f];
+
+            lamf[f] = min(lam[o], lam[n]);
+
+            // Zone-edge face (one side in the zone, one outside):
+            // plainBodyZoneEdge max keeps lam_f = max there
+            if
+            (
+                plainBodyZoneEdge == "max"
+             && (zoneLayer[o] == 0) != (zoneLayer[n] == 0)
+            )
+            {
+                lamf[f] = max(lam[o], lam[n]);
+            }
         }
 
         // Boundary lam_f = lam of the owner cell (the patch value of lam is
@@ -223,6 +253,11 @@
        *(fvc::snGrad(tpIncClosure() - rhoI*gh) + ghf*fvc::snGrad(rhoI))
        *mesh.magSf()
     );
+
+    if (logZoneSource && plainBodyZoneID >= 0 && pimple.firstIter())
+    {
+        #include "swenseZoneSourceLog.H"
+    }
 
     if (pimple.momentumPredictor())
     {
