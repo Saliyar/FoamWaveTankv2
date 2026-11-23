@@ -65,10 +65,8 @@ then
     elif [ "$WM_PROJECT_VERSION_NUMBER" -lt "2206" ]
     then
         (cd waves2FoamSampling1712 ; wmake libso)
-    elif [ "$WM_PROJECT_VERSION_NUMBER" -lt "2412" ]
-    then
-        (cd waves2FoamSampling2206 ; wmake libso)
     else
+        # waves2FoamSampling2412: OpenFOAM v2412 and later (v2506 is supported)
         (cd waves2FoamSampling2412 ; wmake libso)
     fi
 else
