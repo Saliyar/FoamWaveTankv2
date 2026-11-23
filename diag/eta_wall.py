@@ -10,7 +10,7 @@ if case == 'S6a':
     import plot_cfd_vs_hos as P
     eH = lambda xs, t: P.hos_eta(C + '/constant/modes_HOS_SWENSE_clean.dat', P.DEFAULT_READER, np.array(xs), np.array([t]))[0]
 else:
-    C = Z + case; times = ['15', '19', '22.9']
+    C = Z + case; times = sys.argv[2].split(',') if len(sys.argv) > 2 else ['15', '19', '22.9']
     eH = lambda xs, t: np.array([etaHOS(x, t) for x in xs])
 for ts in times:
     t = float(ts); M = Mesh(C, ts)

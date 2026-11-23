@@ -16,6 +16,45 @@ U == incident.UInc() + Uc;
 
     alphaI = alphaI.oldTime();
 
+    // incidentAlphaWall: body patches get the incident wetted fraction on
+    // inflow faces (t^{n+1/2}, current face points) before the advection;
+    // upwind(phi).flux(alphaI) takes this patch value on those faces.
+    if (incidentAlphaWall)
+    {
+        label nIn = 0;
+        scalar wIn = 0, inFlux = 0, outFlux = 0;
+
+        forAll(bodyPatches, i)
+        {
+            const label patchi = bodyPatches[i];
+            fvPatchScalarField& ab = alphaI.boundaryFieldRef()[patchi];
+            ab.evaluate();
+
+            const swenseIncidentAlphaFvPatchScalarField& sb =
+                refCast<const swenseIncidentAlphaFvPatchScalarField>(ab);
+            nIn += sb.nInflow();
+            wIn += sb.wetInflow();
+
+            const scalarField& pf =
+                (swenseNoRelFlux ? phiInc : phiIRel).boundaryField()[patchi];
+            forAll(pf, facei)
+            {
+                const scalar q = pf[facei]*ab[facei];
+                if (pf[facei] < 0) { inFlux += q; } else { outFlux += q; }
+            }
+        }
+
+        reduce(nIn, sumOp<label>());
+        reduce(wIn, sumOp<scalar>());
+        reduce(inFlux, sumOp<scalar>());
+        reduce(outFlux, sumOp<scalar>());
+
+        Info<< "SWENSE incidentAlphaWall: inflow faces " << nIn
+            << " mean wet " << (nIn > 0 ? wIn/nIn : 0.0)
+            << " alphaI flux in " << inFlux << " out " << outFlux
+            << " m3/s" << endl;
+    }
+
     advectorI.advect(SpI, Su);
 
     rhoPhiI = advectorI.getRhoPhi(rho1f, rho2f);

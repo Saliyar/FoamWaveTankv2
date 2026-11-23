@@ -346,3 +346,102 @@ The band G_f per column is the largest-|.| vertical face value in the band, sign
 - The wall faces carry the incident wave's net mass transport through the box: 110-160 mm of level per period, out on the side x < box and in on the side x > box. The internal faces pass almost all of it on.
 - What remains is a gain of 1-6 mm per period in every column next to the box. That is the size of the drift growth (B05 side x > box: −16 → −37 mm in 4 periods).
 - The wall flux uses the cell alphaI, not isoAdvector's isoface value on outflow faces, so the split is an estimate. The totals are exact from the fields.
+
+# alphaI boundary condition swenseIncidentAlpha on the box (23 Nov 2026)
+
+## 1. Code
+
+- **New BC** `swenseIncidentAlpha` ([swenseIncidentAlphaFvPatchScalarField.C](../src/swenseWaveTank/fvPatchFields/swenseIncidentAlpha/swenseIncidentAlphaFvPatchScalarField.C)), a mixed type.
+  - Faces with `phiIRel < 0` (from the wall into the fluid) get valueFraction 1 and refValue = wetted area / face area below the ramped incident eta ([C:172-176](../src/swenseWaveTank/fvPatchFields/swenseIncidentAlpha/swenseIncidentAlphaFvPatchScalarField.C#L172-L176)).
+  - The cut is `swenseSurface::wetArea`, the exact edge-cut of the face on the current `mesh.points()`, so it follows the moving mesh. It is evaluated at t^{n+1/2} = t − dt/2 ([C:146](../src/swenseWaveTank/fvPatchFields/swenseIncidentAlpha/swenseIncidentAlphaFvPatchScalarField.C#L146)).
+  - Outflow faces get valueFraction 0 and refGrad 0, which is zeroGradient ([C:187](../src/swenseWaveTank/fvPatchFields/swenseIncidentAlpha/swenseIncidentAlphaFvPatchScalarField.C#L187)), so isoAdvector's outflow treatment is unchanged.
+- **Switch** `incidentAlphaWall` in waveProperties, default off ([swenseSetup.H:805](../src/swenseWaveTank/solver/swenseSetup.H#L805)).
+  - On: every body patch of alphaI must be swenseIncidentAlpha, otherwise FatalError.
+  - Off: the BC is exactly zeroGradient.
+- **Evaluation.** alphaStep.H evaluates the body patches after `alphaI = alphaI.oldTime()` and before `advectorI.advect` ([alphaStep.H:22-58](../applications/solvers/waveIsoFoamSWENSE/alphaStep.H#L22-L58)). It logs the inflow faces and the alphaI flux in and out.
+- **Where isoAdvector takes the inflow value** (OpenFOAM v2506):
+  - `dVf_ = upwind<scalar>(mesh_, phi_).flux(alpha1_)*dt` (isoAdvectionTemplates.C:456). On a non-coupled boundary face the interpolate takes the patch value, `sfbf[pi] = vf.boundaryField()[pi]` (surfaceInterpolationScheme.C:194).
+  - `timeIntegratedFlux` overwrites only boundary faces with `phiP >= 0` (isoAdvection.C:383).
+  - `limitFluxes`/`boundFlux` change only a cell's downwind faces (isoAdvectionTemplates.C:329).
+  - So on an inflow face dVf = phiIRel·alphaI_b·dt, with alphaI_b the BC value.
+- **Bit check.** With the switch off, B05 rerun to 0.3 s with the new build is identical to B05 (alphaI, alpha.water, Uc, pc and points cmp-equal).
+- **Build** `private_ia`, the frozen copy used by L0, L1 and M1.
+
+## 2. Gate L: B05 with the box locked (staticFvMesh), 23 s
+
+Runs `zonefix/L0` (switch off) and `zonefix/L1` (switch on). Values are etaHOS − etaI in columns within 0.3 m of the box (diag/eta_wall.py).
+
+| t (s) | L0, off: rms / mean (mm) | L1, on: rms / mean (mm) | L1 controls x = ±1: rms (mm) |
+|--:|--:|--:|--:|
+| 8 | 3.7 / −0.0 | **2.1** / −1.2 | 1.9 |
+| 15 | 7.2 / +2.9 | **2.2** / −1.7 | 2.6 |
+| 19 | 12.3 / +7.0 | **2.6** / −2.0 | 1.2 |
+| 23 | 17.8 / +11.5 | **2.3** / −1.7 | 1.1 |
+
+- **L passes.**
+  - L1 stays at 2-3 mm with no growth; the largest value at 23 s is 4 mm. That is below the 6 mm control level.
+  - It is still above L1's own controls (1-2.6 mm).
+- **L0 confirms (a) on the B05 geometry.** The drift grows to 17.8 mm with the box fixed, and the side x > box reaches +15 to +34 mm at 23 s.
+
+## 3. Gate M: B05 (moving, zone 0.5 m, discrete hydrostatics) with the BC, 23 s
+
+Run `zonefix/M1`.
+
+| t (s) | B05: rms / mean (mm) | M1: rms / mean (mm) | M1 controls: rms (mm) |
+|--:|--:|--:|--:|
+| 8 | — | 2.8 / −2.5 | 2.9 |
+| 15 | 12.3 / −11.1 | 6.0 / −5.0 | 4.4 |
+| 19 | 18.5 / −16.2 | **7.1** / −5.9 | 4.2 |
+| 23 | 24.5 / −20.5 | **8.0** / −6.4 | 4.6 |
+
+Per column at 23 s:
+
+| Side | B05 (mm) | M1 (mm) |
+|---|--:|--:|
+| x > box | −27 to −45 | −2 to +1 |
+| x < box | −9 to −11 | −8 to −12 |
+
+**M fails the drift gate** (8.0 mm against 6 mm at 23 s).
+- The BC removes the error on the side x > box.
+- The side x < box keeps the B05 error. With the box locked that side is about −1 mm (L1), so this residual comes with the mesh motion.
+- On that side the wall faces are mostly outflow (phiIRel into the wall), which the BC leaves to isoAdvector.
+
+**Remaining wall budget**, M1 per column, level in mm per period. The wall part uses the written box patch value.
+
+| Column | 15-17 s: total / wall / internal | 19-21 s: total / wall / internal |
+|---|---|---|
+| −0.125, side, x < box | +2.3 / −157.1 / +159.4 | +2.1 / −157.0 / +159.1 |
+| −0.075, over/under | +1.3 / +10.2 / −8.8 | +0.5 / +10.2 / −9.6 |
+| −0.025, over/under | +1.1 / +4.6 / −3.4 | +0.6 / +4.9 / −4.3 |
+| +0.025, over/under | +0.9 / −0.9 / +1.8 | +0.7 / −0.1 / +0.8 |
+| +0.075, over/under | +0.7 / −6.0 / +6.7 | +0.7 / −4.8 / +5.5 |
+| +0.125, side, x > box | +1.5 / +137.1 / −135.6 | +1.2 / +129.6 / −128.4 |
+
+- The net gain falls from +1 to +6 mm per period (B05) to +0.5 to +2.3.
+- The largest remaining gain is the column on the side x < box.
+
+**Motion amplitude, last 5 periods (13.04-23 s), error against plain fine | against experiment**
+
+| Run | Surge | Heave | Pitch | Tension |
+|---|--:|--:|--:|--:|
+| SWENSE test 2 (zone 1.0 m) | +1.6 \| +12.8 % | +4.8 \| +11.8 % | −19.0 \| −12.4 % | +14.0 \| +1.7 % |
+| SWENSE B05 | +7.2 \| +19.0 % | +4.2 \| +11.2 % | −62.3 \| −59.3 % | +32.4 \| +18.1 % |
+| **SWENSE M1 (B05 + BC)** | +12.0 \| +24.3 % | +7.2 \| +14.4 % | **−39.5 \| −34.6 %** | +26.0 \| +12.4 % |
+
+**Wave against plain fine, rms (mm)**
+
+| Run | x = −1 | x = −0.25 | x = +0.25 | x = +1 | Mean at ±1 | Mean at the box |
+|---|--:|--:|--:|--:|--:|--:|
+| SWENSE test 2 | 8.8 | 12.7 | 10.8 | 10.0 | 9.4 | 11.7 |
+| SWENSE B05 | 7.6 | 23.6 | 19.6 | 8.7 | 8.2 | 21.6 |
+| **SWENSE M1** | 7.9 | 11.4 | 10.3 | 6.4 | 7.1 | **10.9** |
+
+- The wave at the box halves (21.6 to 10.9 mm), now just below test 2.
+- Pitch improves from −62 % to −40 % but is still worse than test 2 (−19 %).
+- Surge gets worse (+12 % against +7 %).
+
+## 4. Zone 1.0 m
+
+Not run, because M fails the drift gate. The case `zonefix/M10` (bodyZone |x| < 0.5, BC on) is prepared but not submitted.
+
+Scripts: diag/eta_wall.py (times as an argument), diag/wall_budget.py (case as an argument, uses the patch value), diag/s4.py (motions and waves; extra runs as arguments).

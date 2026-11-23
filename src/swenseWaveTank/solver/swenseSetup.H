@@ -796,6 +796,36 @@ forAll(Uc.boundaryField(), patchi)
 }
 const labelList bodyPatches(bodyPatchList);
 
+// Incident alphaI on body walls (waveProperties incidentAlphaWall, default
+// off): the alphaI patch of every body patch must be swenseIncidentAlpha.
+// alphaStep.H evaluates these patches after alphaI = alphaI.oldTime(), so
+// inflow faces (phiIRel into the fluid) carry the wetted face fraction at
+// t^{n+1/2} into the upwind boundary flux of isoAdvector. Off: the patch
+// condition is exactly zeroGradient and nothing extra is evaluated.
+const bool incidentAlphaWall =
+    mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
+        .lookupOrDefault<Switch>("incidentAlphaWall", false);
+
+if (incidentAlphaWall)
+{
+    forAll(bodyPatches, i)
+    {
+        const fvPatchScalarField& ab = alphaI.boundaryField()[bodyPatches[i]];
+        if (ab.type() != "swenseIncidentAlpha")
+        {
+            FatalErrorInFunction
+                << "incidentAlphaWall on: alphaI on body patch "
+                << mesh.boundary()[bodyPatches[i]].name()
+                << " must be swenseIncidentAlpha, not " << ab.type()
+                << exit(FatalError);
+        }
+    }
+    Info<< "SWENSE incidentAlphaWall on, body patches " << bodyPatches
+        << ", advecting flux "
+        << (swenseNoRelFlux ? "phiInc (set phi phiInc in 0/alphaI)" : "phiIRel")
+        << endl;
+}
+
 // Per-step log of the smallest body-wall to zone-edge distance in cells
 // (waveProperties logZoneEdge, default off; swenseZoneEdgeLog.H)
 const bool logZoneEdge =

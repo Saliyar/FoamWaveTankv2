@@ -28,6 +28,7 @@ Description
 #include "swenseIncident.H"
 #include "swenseRelaxation.H"
 #include "swenseVoFAdvection.H"
+#include "swenseIncidentAlphaFvPatchScalarField.H"
 #include "externalWaveForcing.H"
 
 int main(int argc, char *argv[])
