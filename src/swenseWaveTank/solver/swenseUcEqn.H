@@ -247,12 +247,57 @@
         tpIncClosure = incident.pInc() - deltaHeld;
     }
 
-    const surfaceScalarField faceLim
+    surfaceScalarField faceG
     (
-        (1.0 - lamf)
-       *(fvc::snGrad(tpIncClosure() - rhoI*gh) + ghf*fvc::snGrad(rhoI))
+        "faceG",
+        (fvc::snGrad(tpIncClosure() - rhoI*gh) + ghf*fvc::snGrad(rhoI))
        *mesh.magSf()
     );
+
+    // plainBodyZoneFace solenoidal: remove the gradient part of the face
+    // residual before the zone weight. phiG solves lap(phiG) = div(G) over
+    // the internal faces (zero-gradient walls, reference cell 0); a gradient
+    // force only shifts pressure, but cut at the zone edge it would act as a
+    // horizontal force. Boundary faces keep G.
+    if (plainBodyZoneID >= 0 && plainBodyZoneFace == "solenoidal")
+    {
+        surfaceScalarField Gint("Gint", faceG);
+        forAll(Gint.boundaryField(), patchi)
+        {
+            Gint.boundaryFieldRef()[patchi] = 0;
+        }
+
+        wordList phiGTypes(pc.boundaryField().size());
+        forAll(phiGTypes, patchi)
+        {
+            const word& t = mesh.boundary()[patchi].type();
+            phiGTypes[patchi] =
+                polyPatch::constraintType(t)
+              ? t : word(zeroGradientFvPatchScalarField::typeName);
+        }
+
+        volScalarField phiG
+        (
+            IOobject("phiG", runTime.timeName(), mesh,
+                IOobject::NO_READ, IOobject::NO_WRITE),
+            mesh,
+            dimensionedScalar(pc.dimensions(), Zero),
+            phiGTypes
+        );
+
+        mesh.setFluxRequired(phiG.name());
+
+        fvScalarMatrix phiGEqn
+        (
+            fvm::laplacian(phiG) == fvc::div(Gint)
+        );
+        phiGEqn.setReference(0, 0.0);
+        phiGEqn.solve(mesh.solution().solverDict("pc"));
+
+        faceG -= phiGEqn.flux();
+    }
+
+    const surfaceScalarField faceLim((1.0 - lamf)*faceG);
 
     if (logZoneSource && plainBodyZoneID >= 0 && pimple.firstIter())
     {

@@ -506,6 +506,21 @@ if
         << plainBodyZoneEdge << exit(FatalError);
 }
 
+// Face residual in the body zone (waveProperties plainBodyZoneFace):
+//   full       : (1-lam_f) G_f, as before (default)
+//   solenoidal : (1-lam_f) (G_f - snGrad(phiG)), lap(phiG) = div(G) per step
+const word plainBodyZoneFace =
+    mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
+        .lookupOrDefault<word>("plainBodyZoneFace", "full");
+
+if (plainBodyZoneFace != "full" && plainBodyZoneFace != "solenoidal")
+{
+    FatalErrorInFunction
+        << "plainBodyZoneFace must be full or solenoidal, not "
+        << plainBodyZoneFace << exit(FatalError);
+}
+Info<< "SWENSE plainBodyZoneFace " << plainBodyZoneFace << endl;
+
 // Topological layer of each cell from the zone: 0 in the zone, k for the
 // k-th face-neighbour layer outside, labelMax beyond (serial: cellCells)
 labelList zoneLayer(mesh.nCells(), labelMax);
