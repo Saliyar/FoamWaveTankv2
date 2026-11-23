@@ -1,8 +1,7 @@
 # Ignore compiled files
-Make/linux*
-Make/darwin*
-Make/.*
-**/linux64GccDPInt32Opt/
+**/Make/linux*/
+**/Make/darwin*/
+**/Make/.*
 **/lnInclude/
 
 # Ignore OpenFOAM-specific temporary files
@@ -12,6 +11,10 @@ Make/.*
 *.so
 **/constant/modes_HOS_SWENSE.dat
 applications/solvers/waveIsoGoam/
+
+# Created by Allwmake
+/log.build
+/ThirdParty/Grid2Grid/
 
 # Core dumps
 core.[0-9]*
