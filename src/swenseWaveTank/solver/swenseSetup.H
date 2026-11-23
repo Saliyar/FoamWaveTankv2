@@ -826,6 +826,20 @@ if (incidentAlphaWall)
         << endl;
 }
 
+// Incident reset in the body zone (waveProperties incidentResetInZone,
+// default off): after the alphaI step, alphaI = exact wetted cell fraction in
+// the plainBodyZone cells, with rhoI, uI, pInc rebuilt there and Uc, pc
+// shifted so that the totals are unchanged (swenseResetInZone.H).
+const bool incidentResetInZone =
+    mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
+        .lookupOrDefault<Switch>("incidentResetInZone", false);
+
+if (incidentResetInZone && plainBodyZoneID < 0)
+{
+    FatalErrorInFunction
+        << "incidentResetInZone needs plainBodyZone" << exit(FatalError);
+}
+
 // Per-step log of the smallest body-wall to zone-edge distance in cells
 // (waveProperties logZoneEdge, default off; swenseZoneEdgeLog.H)
 const bool logZoneEdge =

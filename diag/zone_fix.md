@@ -445,3 +445,105 @@ Per column at 23 s:
 Not run, because M fails the drift gate. The case `zonefix/M10` (bodyZone |x| < 0.5, BC on) is prepared but not submitted.
 
 Scripts: diag/eta_wall.py (times as an argument), diag/wall_budget.py (case as an argument, uses the patch value), diag/s4.py (motions and waves; extra runs as arguments).
+
+# Isoface velocity, incidentResetInZone, M10 (23 Nov 2026)
+
+## 1. Isoface velocity on a moving mesh (code, no run)
+
+isoAdvector moves the isoface with the **absolute** velocity it is given; the mesh velocity is never subtracted.
+- `interpolationCellPoint<vector> UInterp(U_)` (OpenFOAM v2506, isoAdvection.C:248) and `Un0[i] = UInterp.interpolate(x0, celli) & n0` (isoAdvection.C:278).
+- The face-crossing times use the current points, `((mesh_.points()[fi] - x0) & n0)/Un0` (cutFaceAdvect.C:237). The volume is scaled by the flux passed in, `dVf = phi/magSf*timeIntegratedArea(..., Un0)` (cutFaceAdvect.C:264).
+- So the flux is relative to the mesh while the isoface velocity is absolute, in all three cases:
+
+| Solver | Field | Flux | Velocity |
+|---|---|---|---|
+| waveIsoFoamSWENSE | alphaI | `phiIRel` = phiInc − meshPhi | `incident.UInc()`, absolute (createSolverFields.H:7) |
+| waveIsoFoamSWENSE | alpha1 | `phi` = phiComp + phiInc − meshPhi | `U == UInc + Uc`, absolute (createSolverFields.H:3, alphaStep.H:11) |
+| plain waveIsoFoam | alpha1 | `phi` after `fvc::makeRelative(phi, U)` (waveIsoFoam.C:161) | `U`, absolute (createFields.H:136) |
+
+## 2. Switch incidentResetInZone (waveProperties, default off)
+
+[swenseResetInZone.H](../src/swenseWaveTank/solver/swenseResetInZone.H) is included after the alphaI step, the relaxation and the incident step, in both the static and the moving path ([swenseTimeLoop.H:48](../src/swenseWaveTank/solver/swenseTimeLoop.H#L48), [:103](../src/swenseWaveTank/solver/swenseTimeLoop.H#L103)). It needs plainBodyZone ([swenseSetup.H:833](../src/swenseWaveTank/solver/swenseSetup.H#L833)).
+
+In the body-zone cells it does the following:
+- **alphaI** = V_wet/V below the ramped incident eta at t^{n+1}, on the current cell points ([:40](../src/swenseWaveTank/solver/swenseResetInZone.H#L40)). rhoI and Drho are rebuilt.
+- **uI = mI/rhoI and pInc** come from the cell blend with the new fraction (`swenseIncident::blendCells`, [:51](../src/swenseWaveTank/solver/swenseResetInZone.H#L51)). The projection's cell correction of the unreset state is kept: UInc_B = uI_B − R/rhoI_B, with R = rhoI_A (uI_A − UInc_A) ([:91](../src/swenseWaveTank/solver/swenseResetInZone.H#L91)).
+- **Uc** += UInc_A − UInc_B ([:93](../src/swenseWaveTank/solver/swenseResetInZone.H#L93)).
+- **pc** += (pIncUse + Drho gh)_A − (pIncUse + Drho gh)_B in every cell, because p = pIncUse + pc + Drho gh (swensePcEqn.H:111). With the discrete hydrostatics, a change of rhoI also changes pIncD below it in the column. pc boundary values move with their face cells on patches that do not fix the value; fixedFluxPressure cannot be evaluated outside the pc equation.
+- **Not touched:** phiInc, UfInc, phiIRel, phi and rho (from alpha1). The face incident stays that of the unreset step, and the projection is not re-run, so UInc outside the zone is unchanged.
+- In the zone (lam = 0) the face force −ghf snGrad(Drho) − snGrad(pc) − G_f adds up to −ghf snGrad(rho) − snGrad(p_rgh). It is therefore invariant under the shift.
+
+## 3. Check
+
+**Reset instant.** The solver logs the change of the totals at every reset. Over all 5671 resets of M10:
+- max |ΔU_tot| = 1.8e-15 m/s;
+- max |Δp_tot| = 4.6e-13 Pa (p_tot up to 3.4e3 Pa).
+
+This is exact to round-off.
+
+**After the first step** (dt 0.00096 s; M10 set-up, reset on against off, cases C1on/C1off, diag/cmp_fields.py):
+
+| Variant | U, max \|on − off\| (m/s) | p, max \|on − off\| (Pa) | alpha1 |
+|---|--:|--:|--:|
+| as run (pc tol 1e-7, limitedLinearV) | 4.6e-10 | 1.1e-5 | 0 |
+| pc, Uc tolerances 1e-14 (converged) | 2.2e-10 | 1.2e-5 | 0 |
+| tolerances 1e-14 + `Gauss linear` for div(rhoPhi,U/Uc) | 1.2e-11 | 3.8e-7 | 0 |
+
+- So 1e-12 holds at the reset, not after the first solve.
+- The gap is not the linear solvers. Most of it is the `limitedLinearV` limiter, which is computed separately from Uc (implicit) and UInc (explicit), so their sum is not the scheme applied to U.
+- What remains with linear convection (1e-10 relative) is a smaller operator that is not linear in the split; not identified.
+- At 0.3 s (C3on/C3off) the totals differ by U 2.4e-4 m/s, p 0.19 Pa, alpha1 2.4e-4.
+
+**Bit check, switches off.** B05 to 0.3 s with this build (`private_rz`) is identical to B05 (alphaI, alpha.water, U, Uc, p, pc cmp-equal).
+
+## 4. M10: zone 1.0 m, discrete hydrostatics + incidentAlphaWall + reset, 23 s
+
+Run `zonefix/M10`, coarse, test 2 settings, wall time 326 s.
+- Reset size: |ΔalphaI| up to 0.011 (median 0.002 per step).
+- |ΔUInc| up to 0.78 m/s (median 0.009, 99th percentile 0.27): one interface cell whose blend moves between the water and the Air2Air velocity. Uc takes the opposite shift.
+
+**Drift**, etaHOS − etaI in columns within 0.3 m of the box, rms / mean (mm):
+
+| Run | t (s) | All | x < box | x > box | Controls x = ±1, rms |
+|---|--:|--:|--:|--:|--:|
+| test 2 | 8 | 3.0 / −2.7 | 3.5 / −3.4 | 2.6 / −2.3 | 2.8 |
+| test 2 | 15 | 9.9 / −8.7 | 5.8 / −5.8 | 14.2 / −13.5 | 3.3 |
+| test 2 | 19 | 14.7 / −12.3 | 6.5 / −6.4 | 22.3 / −21.7 | 3.4 |
+| test 2 | 23 | 18.3 / −14.9 | 6.8 / −6.8 | 28.2 / −27.9 | 4.1 |
+| M1 | 8 | 2.8 / −2.5 | 4.1 / −3.8 | 1.7 / −1.6 | 2.9 |
+| M1 | 15 | 6.0 / −5.0 | 7.4 / −7.3 | 1.0 / −0.9 | 4.4 |
+| M1 | 19 | 7.1 / −5.9 | 8.9 / −8.8 | 1.0 / −0.6 | 4.2 |
+| M1 | 23 | 8.0 / −6.4 | 9.9 / −9.8 | 0.9 / −0.4 | 4.6 |
+| **M10** | 8 | 1.0 / −0.9 | 0.8 / −0.8 | 1.1 / −1.0 | 2.8 |
+| **M10** | 15 | 1.3 / −1.2 | 1.2 / −1.1 | 1.3 / −1.3 | 3.7 |
+| **M10** | 19 | 1.3 / −1.2 | 1.2 / −1.1 | 1.3 / −1.3 | 4.2 |
+| **M10** | 23 | 1.2 / −1.2 | 1.2 / −1.1 | 1.4 / −1.3 | 5.1 |
+
+- **The M10 drift is forced, not a test.** These columns lie inside the 1.0 m zone, where the reset sets alphaI to the incident surface every step. What it shows is that the reset is applied.
+- The independent measures are the controls (outside the zone) and the motions and waves below.
+
+**Motion amplitude, last 5 periods (13.04-23 s), error against plain fine | against experiment**
+
+| Run | Surge | Heave | Pitch | Tension |
+|---|--:|--:|--:|--:|
+| Plain coarse | −3.0 \| +7.7 % | −7.2 \| −1.0 % | −39.7 \| −34.8 % | +5.0 \| −6.4 % |
+| SWENSE test 2 (zone 1.0 m) | +1.6 \| +12.8 % | +4.8 \| +11.8 % | −19.0 \| −12.4 % | +14.0 \| +1.7 % |
+| SWENSE M1 (zone 0.5 m, BC) | +12.0 \| +24.3 % | +7.2 \| +14.4 % | −39.5 \| −34.6 % | +26.0 \| +12.4 % |
+| **SWENSE M10 (zone 1.0 m, BC + reset)** | +6.8 \| +18.6 % | **+2.9 \| +9.8 %** | **−17.4 \| −10.7 %** | +20.7 \| +7.6 % |
+
+**Wave against plain fine, rms (mm)**
+
+| Run | x = −1 | x = −0.25 | x = +0.25 | x = +1 | Mean at ±1 | Mean at the box |
+|---|--:|--:|--:|--:|--:|--:|
+| Plain coarse | 9.4 | 8.0 | 11.5 | 9.8 | 9.6 | 9.7 |
+| SWENSE test 2 | 8.8 | 12.7 | 10.8 | 10.0 | 9.4 | 11.7 |
+| SWENSE M1 | 7.9 | 11.4 | 10.3 | 6.4 | 7.1 | 10.9 |
+| **SWENSE M10** | 6.6 | 10.0 | 8.4 | 4.6 | **5.6** | **9.2** |
+
+**Result.**
+- M10 has the smallest wave error of all coarse runs, SWENSE or plain: 5.6 mm at ±1 and 9.2 mm at the box.
+- Heave and pitch are closest to plain fine of the coarse SWENSE runs (pitch −17 % against −19 % for test 2 and −40 % for plain coarse).
+- Surge (+6.8 %) and tension (+20.7 %) remain worse than test 2 (+1.6 %, +14 %).
+- M10 differs from test 2 in three switches at once (discrete hydrostatics, incidentAlphaWall, reset), so the gain cannot be assigned to the reset alone.
+
+Scripts: diag/cmp_fields.py (on/off field difference), diag/eta_wall.py (side split, case path), diag/s4.py. Build `private_rz`.

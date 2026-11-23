@@ -263,6 +263,18 @@ public:
         //  UfInc with the linear face value of alphaI, and pInc for output
         void blend(const volScalarField& alphaI);
 
+        //- Cell blend of the listed cells for the fractions gamma (clipped to
+        //  [0, 1] here), at the time of the last evaluate(): u = mI/rhoI and
+        //  p = gamma pW + (1 - gamma) pA, as blend() gives in those cells.
+        //  Nothing is stored (incidentResetInZone).
+        void blendCells
+        (
+            const labelUList& cells,
+            const scalarField& gamma,
+            vectorField& u,
+            scalarField& p
+        ) const;
+
         //- Rebuild the evaluation points from the current cell and face
         //  centres after a mesh motion (call when mesh.moving()). Only the
         //  point lists and their Grid2Grid basis change; the Grid2Grid and
@@ -275,6 +287,7 @@ public:
         //  reference to UInc: only to make UInc relative to the mesh around
         //  its advection step, and restore it after
         volVectorField& UIncRW() { return UInc_; }
+        volScalarField& pIncRW() { return pInc_; }
         const volScalarField& pInc() const { return pInc_; }
         const surfaceVectorField& UfInc() const { return UfInc_; }
 

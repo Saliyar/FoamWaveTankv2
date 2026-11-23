@@ -861,6 +861,34 @@ void Foam::swenseIncident::evaluate(const scalar t)
 }
 
 
+void Foam::swenseIncident::blendCells
+(
+    const labelUList& cells,
+    const scalarField& gamma,
+    vectorField& u,
+    scalarField& p
+) const
+{
+    const scalar t = tNow_;
+
+    u.setSize(cells.size());
+    p.setSize(cells.size());
+
+    forAll(cells, i)
+    {
+        // Flat point index of a cell centre is the cell label (as in blend)
+        blendCell
+        (
+            cells[i],
+            t,
+            min(max(gamma[i], scalar(0)), scalar(1)),
+            u[i],
+            p[i]
+        );
+    }
+}
+
+
 void Foam::swenseIncident::blend(const volScalarField& alphaI)
 {
     const scalar t = tNow_;

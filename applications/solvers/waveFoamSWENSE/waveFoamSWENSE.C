@@ -29,6 +29,7 @@ Description
 #include "constrainPressure.H"
 #include "fixedGradientFvPatchFields.H"
 #include "swenseIncident.H"
+#include "swenseSurface.H"
 #include "swenseRelaxation.H"
 #include "swenseVoFAdvection.H"
 #include "externalWaveForcing.H"

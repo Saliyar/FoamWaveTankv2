@@ -10,7 +10,7 @@ if case == 'S6a':
     import plot_cfd_vs_hos as P
     eH = lambda xs, t: P.hos_eta(C + '/constant/modes_HOS_SWENSE_clean.dat', P.DEFAULT_READER, np.array(xs), np.array([t]))[0]
 else:
-    C = Z + case; times = sys.argv[2].split(',') if len(sys.argv) > 2 else ['15', '19', '22.9']
+    C = case if '/' in case else Z + case; times = sys.argv[2].split(',') if len(sys.argv) > 2 else ['15', '19', '22.9']
     eH = lambda xs, t: np.array([etaHOS(x, t) for x in xs])
 for ts in times:
     t = float(ts); M = Mesh(C, ts)
@@ -38,4 +38,7 @@ for ts in times:
         m = tg == k
         if m.any():
             print('%s t %s %s: n %d  max|.| %.1f  rms %.1f  mean %+.1f mm  (depth %.3f..%.3f, box x %.3f..%.3f)' % (case, ts, k, m.sum(), abs(d[m]).max(), np.sqrt((d[m]**2).mean()), d[m].mean(), min(r[3] for r in rows), max(r[3] for r in rows), bx0, bx1))
+    for nm, sel in (('x<box', np.array([r[0] == 'box' and r[1] < bx0 for r in rows])), ('x>box', np.array([r[0] == 'box' and r[1] > bx1 for r in rows]))):
+        if sel.any():
+            print('   %s %s: n %d  rms %.1f  mean %+.1f mm' % (ts, nm, sel.sum(), np.sqrt((d[sel]**2).mean()), d[sel].mean()))
     print('   per column x: ' + ' '.join('%.2f:%+.0f' % (xs[i], d[i]) for i in np.argsort(xs) if tg[i] == 'box'))

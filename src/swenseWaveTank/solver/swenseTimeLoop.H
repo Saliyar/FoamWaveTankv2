@@ -44,6 +44,11 @@ while (runTime.run())
 
         // Steps 1b to 1d: incident field of the new level
         #include "swenseIncidentStep.H"
+
+        if (incidentResetInZone)
+        {
+            #include "swenseResetInZone.H"
+        }
     }
 
     // Step 3: momentum (Uc) and pressure (pc)
@@ -94,6 +99,11 @@ while (runTime.run())
             #include "alphaStep.H"
             #include "swenseAlphaRelax.H"
             #include "swenseIncidentStep.H"
+
+            if (incidentResetInZone)
+            {
+                #include "swenseResetInZone.H"
+            }
 
             // Relative total flux with the incident flux of the new level
             // (as the last line of swenseCorrectPhi.H does)
