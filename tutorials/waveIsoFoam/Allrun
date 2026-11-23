@@ -7,7 +7,7 @@ waveGaugesNProbes
 setWaveParameters
 relaxationZoneLayout
 setWaveField
-waveFoam
+waveIsoFoam
 
 
 

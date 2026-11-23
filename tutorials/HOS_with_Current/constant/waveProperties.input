@@ -42,7 +42,6 @@ Grid2GridCoeffs
     Tsoft 0;
 
     referencePosition (-16.95 -14.84 0);
-    refDirection      (1 0 0);
     referenceTime     0.0;
     referenceTheta    0;
 
