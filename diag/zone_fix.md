@@ -235,3 +235,60 @@ Elevation is the column integral of alpha from the written fields.
 - wave at the box 21.6 mm against 11.7 mm.
 
 It is only slightly better away from the box (8.2 mm against 9.4 mm at ±1). The still-water heave decay (step 3) does not carry over to the wave case: the small zone hurts pitch badly.
+
+# Terms of rI in the band, from written fields (no solver run), 23 Nov 2026
+
+**Method.** Script [diag/rI_terms.py](rI_terms.py) (Python on the written fields).
+- Cases: ZD (empty tank, zone 1.0 m) and B05 (box, zone 0.5 m), both with the switch on.
+- Times: 15, 19 and 22.9 s. 22.9 s instead of 23 s because the ddt central difference needs t ± 0.1 s.
+- Band: 0.01 < alphaI < 0.99. Region: ZD outside the zone at 0.5 < |x| < 1.5; B05 within 0.3 m of the box faces.
+
+**Terms** (per unit volume; B05 includes the moving mesh):
+- **ddt**: (rhoI UI V) central difference over ±0.1 s, divided by V.
+- **conv**: Gauss linear with flux interpolate(rhoI)·(UI_f·Sf − meshPhi). This approximates the solver's limitedLinearV and projected incident flux.
+- **Face part**: G_f = snGrad(pHydI_rgh + pDyn) + ghf snGrad(rhoI), split three ways and each reconstructed:
+  - pHyd: snGrad(pHydI);
+  - gravity: the rest of the hydrostatic part;
+  - pDyn: snGrad(pDyn).
+- **visc**: laplacian(mu, UI).
+
+## 1. Terms of rI in band cells (N/m³)
+
+| Term | ZD max | ZD rms | B05 max | B05 rms |
+|---|--:|--:|--:|--:|
+| ddt(rhoI uI) | 1558 | 726 | 1556 | 875 |
+| div(mI uI) | 1272 | 543 | 989 | 477 |
+| pHyd (face) | 7245 | 5348 | 7631 | 5201 |
+| gravity (face) | 7237 | 5340 | 7667 | 5152 |
+| pHyd + gravity | 794 | 292 | 1179 | 576 |
+| pDyn (face) | 408 | 145 | 291 | 171 |
+| viscous | 0.1 | 0.0 | 0.0 | 0.0 |
+| ddt + conv | 709 | 339 | 1005 | 578 |
+| ddt + conv + pHyd + gravity | 661 | 290 | 850 | 409 |
+| **total rI** | 476 | **231** | 888 | **397** |
+| total, x component | 452 | 154 | 887 | 379 |
+| total, z component | 276 | 173 | 290 | 119 |
+
+## 2. Column level error etaHOS − etaI (etaI = bottom + Σ alphaI dz on the moved mesh)
+
+| Case | Columns | max \|.\| (mm) | rms (mm) | mean (mm) |
+|---|--:|--:|--:|--:|
+| ZD | 120 | 7.8 | 4.4 | −1.4 |
+| B05 | 39 | 44.6 | 19.0 | −15.7 |
+
+In B05, alphaI is 20-35 mm above the HOS surface in the columns next to the box (19 s); away from the box it is within 2-8 mm.
+
+## 3. Band G_f against rho_w g (etaHOS − etaI)/dz, column by column
+
+The band G_f per column is the largest-|.| vertical face value in the band, signed upward.
+
+| Case | Slope | R² | n |
+|---|--:|--:|--:|
+| ZD | −0.05 | 0.02 | 120 |
+| B05 | 0.06 | 0.23 | 39 |
+
+## Verdict
+
+- **pDyn is not the cause.** It is the smallest pressure term (rms 145-171), the slope is about 0.05 rather than 1, and R² is 0.02-0.23.
+- **Dominant term: unbalanced incident inertia.** ddt + conv (rms 339 / 578) is balanced only partly by the lateral hydrostatic pressure of the discrete alphaI surface (pHyd + gravity, 292 / 576), and pDyn takes off little more.
+- In B05 the residual is mainly horizontal (x 379 against z 119) and sits where alphaI is 16 mm (mean) off the HOS surface. The analytic acceleration follows the HOS surface, while the hydrostatic slope follows the advected alphaI.
