@@ -194,3 +194,44 @@ Fit of z = z0 + A e^(−ζωt) cos(ω_d t + φ) over 0.2-6 s:
 - **The switch matters for the moving box.** Without it (H10off) the decay is irregular, with a stretched second cycle.
 
 Runs (`zonefix/`): W05, W07, M0, M0off, heave/{HP, HPM, HPF, H10, H07, H05, H10off}.
+
+# Step 4: moored box, zone 0.5 m, switch on (23 Nov 2026)
+
+**Set-up.** Run B05 (`zonefix/B05`):
+- coarse mesh, test 2 settings (blend 0.0438667, rampTsoft 12), 23 s;
+- bodyZone |x| < 0.25, z < 0.1118;
+- `incidentHydrostatic discrete` and `logZoneEdge` on (commit 47b76d2).
+
+Plain fine and plain medium already existed (`meshes/`).
+
+**Zone edge.** The smallest distance from the box wall to the zone edge is exactly 1 cell all run.
+- It never drops below 0.99 in 4850 steps. The nearest edge is the zone top face, one row (0.049 m) above the box top.
+- The zone cells inside innerDistance move rigidly with the box, so the gap does not change.
+
+## Motion amplitude, last 5 periods (13.0-23 s): error against plain fine | against experiment
+
+| Run | Surge | Heave | Pitch | Tension |
+|---|--:|--:|--:|--:|
+| Plain fine | 0 \| +11.0 % | 0 \| +6.7 % | 0 \| +8.1 % | 0 \| −10.8 % |
+| Plain medium | −0.2 \| +10.8 % | −2.1 \| +4.5 % | +1.3 \| +9.5 % | −0.6 \| −11.4 % |
+| Plain coarse | −3.0 \| +7.7 % | −7.2 \| −1.0 % | −39.7 \| −34.8 % | +5.0 \| −6.4 % |
+| SWENSE test 2 (zone 1.0 m, switch off) | +1.6 \| +12.8 % | +4.8 \| +11.8 % | −19.0 \| −12.4 % | +14.0 \| +1.7 % |
+| SWENSE B05 (zone 0.5 m, switch on) | +7.2 \| +19.0 % | +4.2 \| +11.2 % | **−62.3 \| −59.3 %** | **+32.4 \| +18.1 %** |
+
+## Wave elevation against plain fine, rms (mm), same window
+
+Elevation is the column integral of alpha from the written fields.
+
+| Run | x = −1 | x = −0.25 | x = +0.25 | x = +1 | Mean at ±1 | Mean at the box (±0.25) |
+|---|--:|--:|--:|--:|--:|--:|
+| Plain medium | 1.5 | 6.4 | 5.4 | 2.3 | 1.9 | 5.9 |
+| Plain coarse | 9.4 | 8.0 | 11.5 | 9.8 | 9.6 | 9.7 |
+| SWENSE test 2 | 8.8 | 12.7 | 10.8 | 10.0 | 9.4 | 11.7 |
+| SWENSE B05 | 7.6 | 23.6 | 19.6 | 8.7 | 8.2 | **21.6** |
+
+**Result.** B05 is worse than test 2 near the box:
+- pitch −62 % against plain fine;
+- tension +32 %;
+- wave at the box 21.6 mm against 11.7 mm.
+
+It is only slightly better away from the box (8.2 mm against 9.4 mm at ±1). The still-water heave decay (step 3) does not carry over to the wave case: the small zone hurts pitch badly.
