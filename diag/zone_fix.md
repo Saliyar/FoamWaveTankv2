@@ -860,3 +860,77 @@ No fix.
 - H_S3 runs to 23 s without the 21.5 s jet. The air Uc is still above target, though: per-second maxima are 6-10.7 m/s against 5-6.5 m/s in H_S2 before its crash. B (together with A) raises the air velocity in the first 20 s.
 - H_S3 is closer to plain fine than H_S on surge, heave, tension and the upstream wave height. The pitch RAO is still +11.5 % and the mean pitch +0.37 deg too high. The pitch h2 is 15 % low and lags 23.5°, unchanged from H_S. So the pitch error does not come from the stray alphaI.
 - The 1e-8 tolerance alone moves plain waveIsoFoam (H_P2 vs H_P) by up to +2.4 points on the pitch RAO and +0.11 deg on the mean pitch, and it makes the run 32 % slower.
+
+## Where the 2nd-harmonic pitch deficit sits, H_S3 vs H_P2, 13-23 s (s11.py, no solver run), 2026-11-24
+
+**Method.**
+- Data: the 0.1 s writes (101 per run), with T = 1.993 s. Each series is fitted with m + Σ_{n=1..3} Re(A_n e^{-inωt}), the same fit as s10. Phases use the s10 convention, so a more negative phase means a lag.
+- Moment: pitch moment about the centreOfRotation in sixDoFRigidBodyMotionState, built from the written face values on `box`:
+  - Faces: front (x−, faces 32-41), back (x+, 42-51), bottom (0-15) and top (16-31). The y planes are empty in 2D, so there are no side faces.
+  - The face pressure moment about the origin matches box_forces pressure_y to 1e-15.
+- Parts, for H_S3:
+  - pInc and pc.
+  - Drho gh = (rho_b − rhoI_b)(−g z_f), with hRef = 0.
+  - resid = p − pInc − pc − Drho gh of the written face values. It is up to 47 Pa on single near-surface front/back faces, and its 2nd harmonic is ≤ 1.7e-3 N m.
+  - Viscous = μ(U_P − U_b)_t / d. It is 20 % below box_forces viscous, but its 2nd harmonic is ~1e-5 N m (0.1 % of A2), so it is negligible.
+
+**1. Pitch moment, 2nd harmonic** (N m per cell depth; |A2| and phase in deg)
+
+| face | H_P2 | H_S3 | H_S3 vs H_P2 | H_S3 pInc | H_S3 pc | H_S3 Drho gh |
+|---|--:|--:|--:|--:|--:|--:|
+| front | 3.06e-2, +179.9 | 2.94e-2, +156.0 | −4 %, −23.9° | 3.09e-2, +156.9 | 4.0e-3, +148.5 | 5.1e-3, −28.1 |
+| back | 2.17e-2, −104.0 | 1.91e-2, −113.3 | −12 %, −9.3° | 1.72e-2, −81.8 | 9.3e-3, +135.5 | 9.4e-3, −113.4 |
+| bottom | 5.31e-2, +27.6 | 4.37e-2, +4.5 | **−18 %, −23.1°** | 4.69e-2, +11.1 | 6.1e-3, −113.3 | 0 |
+| top | 3.4e-4 | 7.4e-4 | | 1.1e-4 | 6.9e-4 | 0 |
+| sum | 1.198e-2, +16.3 | 9.89e-3, −16.4 | **−17 %, −32.7°** | 2.03e-2, +11.5 | 1.24e-2, +168.8 | 1.11e-2, −86.3 |
+
+The 1st harmonic of the sum is 5.13e-2 in H_P2 and 5.26e-2 in H_S3 (+2.5 %, −4.7°). The −17 % / −33° on the moment matches the pitch h2 (−15 %, −23.5°).
+
+Here is H_S3 − H_P2 projected on the H_P2 total A2 phasor. In-phase is first; quadrature is second, where + is a lag. Units are 1e-3 N m.
+
+| | front | back | bottom | top | sum |
+|---|--:|--:|--:|--:|--:|
+| H_S3 − H_P2 | +7.0, −10.4 | −1.2, −4.0 | **−9.3, +19.3** | −0.1, +0.4 | −3.7, +5.3 |
+| of which pInc_S − P_total | +5.4, −11.0 | | −5.4, +14.6 | | |
+| of which pc + Drho gh + resid | +1.5, +0.6 | −9.7, −2.4 | −3.9, +4.7 | | |
+
+On the bottom, Drho gh is 0 because that face is always wet. That leaves only pInc and pc.
+
+**2. Second harmonic of eta (mm) and of p at body-fixed faces (Pa).** Each cell gives |A2| and phase; A1 is the 1st-harmonic amplitude.
+
+| point | H_S3 total | H_S3 incident | H_P2 | A1 S / SI / P |
+|---|--:|--:|--:|--:|
+| eta, column at x = −1.25 | 11.1, +49.6 | 13.1, +41.5 | 11.6, +69.7 | 63 / 60 / 60 |
+| eta, column next to front | 11.8, −156.3 | 11.4, −150.6 | 10.0, −142.3 | 68 / 71 / 66 |
+| eta, column next to back | 11.2, −178.1 | 10.3, +175.0 | 10.8, −167.5 | 68 / 72 / 65 |
+| p front, z = −0.072 / −0.046 / −0.019 (faces 32/34/36) | 73, −23 / 68, −24 / 62, −28 | 83, −21 / 77, −25 / 70, −29 | 79, +2 / 73, +1 / 67, −3 | |
+| p back, faces 42/44/46 | 57, −125 / 48, −107 / 46, −106 | 44, −80 / 40, −88 / 38, −99 | 61, −114 / 54, −98 / 55, −97 | |
+| p bottom, x = −0.094 / 0.006 / +0.094 (faces 0/8/15) | 68, −10 / 29, −26 / 8, −92 | 82, −22 / 53, −44 / 45, −75 | 75, +12 / 28, −10 / 14, −102 | |
+| p top (faces 16/23/31) | ≤ 1.5 | 0.2 | ≤ 1.5 | |
+
+**3. Max air |U| per second** (m/s; alpha.water < 0.5; writes only)
+- Band A: the 3 cells above the top wet cell of each column.
+- Band B: the top 3 rows of each column.
+
+| s | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 |
+|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|
+| A, H_S3 | 8.6 | 6.7 | 8.6 | 7.1 | 7.2 | 5.5 | 10.5 | 6.2 | 7.1 | 6.1 |
+| A, H_P2 | 7.6 | 5.7 | 8.1 | 5.6 | 8.3 | 5.5 | 8.2 | 5.5 | 8.3 | 5.6 |
+| B, H_S3 | 4.3 | 5.3 | 3.4 | 3.7 | 3.9 | 3.0 | 3.2 | 3.2 | 3.4 | 2.3 |
+| B, H_P2 | 3.2 | 2.2 | 3.5 | 2.1 | 3.5 | 2.7 | 3.3 | 2.1 | 3.0 | 2.3 |
+
+- H_S3 band A peaks at 10.5 m/s at 19.4 s, x −0.20, z +0.09 (upstream of the box). H_P2 band A peaks at 8.3 m/s at 21.5 s, x −0.14.
+- Band B peaks: H_S3 5.3 m/s at 14.2 s, x −0.49; H_P2 3.5 m/s at 17.7 s.
+- In H_S3 the air |U| is almost all Uc: |Uc| is within 0.25 m/s of |U|.
+
+**Readings.**
+- **Face: bottom.** It has the largest H_S3 − H_P2 difference, 2.1e-2 N m, which is 1.8 × the H_P2 net A2. That difference is −9.3e-3 in phase and +19.3e-3 lag. The front carries the opposite sign (+7.0e-3, −10.4e-3) and cancels about half of it. The back adds −1.2e-3 / −4.0e-3.
+- **Part: pInc.**
+  - Bottom: pInc_S − P_total gives −5.4e-3 / +14.6e-3, which is ~60 % of the bottom in-phase loss and ~75 % of its lag. pc gives the rest (−3.9e-3 / +4.7e-3).
+  - Front: pInc alone gives the whole difference (+5.4e-3 / −11.0e-3), because pc and Drho gh almost cancel.
+  - At the points, the 2nd-harmonic pressure on front and bottom has the phase of pInc to within 2-12°. That is 16-25° behind H_P2.
+- **Why pInc lags.** At x = −1.25 the H_S3 incident 2nd harmonic (the analytic Stokes II wave) is 13.1 mm at +41.5°. H_P2's propagated wave there is 11.6 mm at +69.7°, i.e. 28° earlier and 11 % smaller. The H_S3 total moves only 8° toward H_P2. This run does not show which of the two is closer to the experiment.
+- **Caveat.** The −17 % / −33° net is the small remainder of large, opposing front and bottom moments: per face |A2| is 3-5e-2 against a net 1.2e-2. The split between pInc_S and P_total also compares an H_S3 part with an unsplit H_P2 total. Taken over all faces, pInc_S − P_total is +8.3e-3 / +1.7e-3, and the scattered parts are −11.9e-3 / +3.6e-3, mostly the back-face pc + Drho gh. So the face-and-part attribution holds per face, not as a clean split of the net.
+- **Air velocity.** Near the surface (band A), plain waveIsoFoam also reaches 5.5-8.3 m/s, so a 5 m/s target is not met by H_P2 either. H_S3 is 0-2.3 m/s higher in 8 of 10 seconds. In the top 3 rows H_S3 reaches 2.3-5.3 m/s against 2.1-3.5 m/s.
+
+No fix.
