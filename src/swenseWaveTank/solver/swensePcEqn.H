@@ -34,6 +34,14 @@
 
     phiHbyA += phig;
 
+    // pcAtmosphereConsistent (default off): pc_b = -Drho_b gh_b on the
+    // atmosphere patch, so p_b = pInc_b + pc_b + Drho_b gh_b = pInc_b
+    if (pcAtmosphereConsistent)
+    {
+        pc.boundaryFieldRef()[pcAtmPatch] ==
+            -Drho.boundaryField()[pcAtmPatch]*gh.boundaryField()[pcAtmPatch];
+    }
+
     constrainPressure(pc, Uc, phiHbyA, rAUf);
 
     while (pimple.correctNonOrthogonal())

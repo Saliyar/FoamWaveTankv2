@@ -829,3 +829,34 @@ These terms stay negligible: the closure (1 − lam) r_I is zero to 21.6 s (max 
 - w = 0 in all 22 cells for the whole run: these cells are outside the body zone, and at their x position the relaxation weight is still zero. lam = 1 to 21.6 s; from 21.614 s the ratio test (rhoI/rho > 2) sets lam = 0 in some top-row cells, which is when the closure term appears.
 
 No fix.
+
+## isoAdvector tolerances 1e-8 (A) and pc_b = -Drho_b gh_b on the atmosphere (B), 2026-11-24
+
+**Changes.**
+- A: fvSolution `"(alpha.water|alphaI).*"` isoFaceTol 1e-8, surfCellTol 1e-8 (was 1e-2 in H_S2 and H_P).
+- B: `pcAtmosphereConsistent` (waveProperties Switch, default off, read in swenseSetup.H like incidentHydrostatic). In swensePcEqn.H, before constrainPressure, the atmosphere value of pc is set to -Drho_b gh_b, so p = pInc + pc + Drho gh is the same on that patch whatever alphaI is there. pc stays fixedValue.
+- Build private_pa. Runs: H_S3 = H_S2 + A + B; H_P2 = H_P + A (plain waveIsoFoam).
+
+**Gates.**
+- 1, switch off, 0.3 s (G1_off): all 66 files in 0.1, 0.2 and 0.3 are byte-identical to H_S2.
+- 2, pure waves without a body, switch on, 200 steps (G2_on): max|alpha1 - alphaI| = 0, max|Uc| = 0, max|pc| = 0 at every step; pc on the atmosphere is uniform 0. The gate is weak because the 12 s ramp is tiny within 0.2 s.
+
+**Results, 13-23 s** (s10.py, s6.py; H_S2 crashed at 22.69 s, so its values are to 22.6 s).
+
+| | H_S2 | H_S3 | H_P | H_P2 | target |
+|---|--:|--:|--:|--:|--:|
+| max alphaI, cells wholly above etaI + 2 dz, writes 12-23 s | 5.5e-3 | 2.5e-9 (all 111 writes ≤ 1e-6) | - | - | ≤ 1e-6 |
+| max alpha1, same cells | 0.99 (crash) | 1.6e-4 at x ≈ 0, z ≈ 0.06 (next to the body); 1.2e-9 for z > 0.3 | 7.0e-3 | 1.1e-9 | ≤ 1e-6 |
+| max air \|Uc\| (m/s) | 748e81 (crash), 6.5 to 20 s | 10.7 at 19.39 s; 6-10 per second after 9 s | - | - | < 5 |
+| wall time | 6317 s to 22.69 s | 4733 s | 10849 s | 14341 s | |
+| RAO surge / heave / pitch / tension vs plain fine | H_S: +4.9 / +1.3 / +14.9 / +16.4 % | +0.6 / -0.8 / **+11.5** / **+6.5** % | +1.1 / +0.2 / +1.8 / +1.5 % | +1.2 / -0.3 / **+4.2** / +1.5 % | 3 % |
+| RAO phase pitch / tension vs plain fine | H_S: -5.4 / +3.1° | +10.3 / +6.8° | +4.5 / +1.4° | +4.4 / +1.7° | |
+| mean surge mm / tension N / pitch deg / heave mm (plain fine +8.10 / 0.2324 / 0.673 / +1.20) | H_S: +9.62 / 0.2758 / 1.128 / -0.37 | +7.58 / 0.2338 / **1.038** / **-0.72** | +8.08 / 0.2300 / 0.636 / +0.76 | +7.49 / 0.2276 / 0.748 / +0.77 | 3 % |
+| pitch h1 / h2 (plain fine 2.430 / 3.211 deg) | H_S: +17.3 % -10.6° / -17.8 % -23.1° | +12.0 % +1.7° / -14.9 % -23.5° | +0.2 % / -2.3 % | +2.8 % +4.2° / -1.4 % -3.5° | |
+| wave A1 at the box gauge / x = -1.25 (ratio to target; plain fine 0.961 / 0.997) | H_S: 0.981 / 1.097 | 0.966 / 1.060 | 0.945 / 1.002 | 0.948 / 1.004 | |
+
+**Readings.**
+- A removes the stray incident alpha in the air: max alphaI above etaI + 2 dz drops from 5.5e-3 to 2.5e-9. In H_P2 the same tolerance takes stray alpha1 in air from 7e-3 to 1e-9.
+- H_S3 runs to 23 s without the 21.5 s jet. The air Uc is still above target, though: per-second maxima are 6-10.7 m/s against 5-6.5 m/s in H_S2 before its crash. B (together with A) raises the air velocity in the first 20 s.
+- H_S3 is closer to plain fine than H_S on surge, heave, tension and the upstream wave height. The pitch RAO is still +11.5 % and the mean pitch +0.37 deg too high. The pitch h2 is 15 % low and lags 23.5°, unchanged from H_S. So the pitch error does not come from the stray alphaI.
+- The 1e-8 tolerance alone moves plain waveIsoFoam (H_P2 vs H_P) by up to +2.4 points on the pitch RAO and +0.11 deg on the mean pitch, and it makes the run 32 % slower.

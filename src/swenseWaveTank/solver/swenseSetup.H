@@ -606,6 +606,26 @@ if (incidentHydrostatic != "analytic" && incidentHydrostatic != "discrete")
 
 const bool hydroDiscrete = (incidentHydrostatic == "discrete");
 
+// Atmosphere value of pc consistent with p = 0 there (waveProperties
+// pcAtmosphereConsistent, default off). p = pInc + pc + Drho gh, so with the
+// incident pressure zero on the atmosphere patch pc_b = -Drho_b gh_b. Set in
+// swensePcEqn.H before constrainPressure; pc stays fixedValue. Off: pc_b is
+// the value of 0/pc (0), unchanged.
+const bool pcAtmosphereConsistent =
+    mesh.thisDb().lookupObject<IOdictionary>("waveProperties")
+        .lookupOrDefault<Switch>("pcAtmosphereConsistent", false);
+
+const label pcAtmPatch = mesh.boundaryMesh().findPatchID("atmosphere");
+
+if (pcAtmosphereConsistent && pcAtmPatch < 0)
+{
+    FatalErrorInFunction
+        << "pcAtmosphereConsistent needs a patch named atmosphere"
+        << exit(FatalError);
+}
+
+Info<< "SWENSE pcAtmosphereConsistent " << pcAtmosphereConsistent << endl;
+
 // Column tables, built once on the mesh at set-up (topology: the cell
 // through the top face of each cell, found by the face normal at set-up;
 // -1 where the top face is a boundary: atmosphere, or a body wall). Cells in
