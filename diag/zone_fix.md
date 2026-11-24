@@ -611,3 +611,59 @@ Against experiment: plain fine +11.0 / +6.7 / +8.1 / −10.8 %; H_P +10.3 / +5.0
 - H_S is 2.6× cheaper than H_P (dt 2e-4 fixed against H_P's adaptive dt from 1.25e-3).
 
 Scripts: diag/mkHybrid.py (blockMeshDict generator), diag/eta0.py (still-water level and sidedness), diag/s5.py (table; extra runs as label=path). Build `private_hx`.
+
+## Harmonics, mean loads and RAOs from existing runs (no solver run; `diag/s6.py`)
+
+Runs: plain fine, H_P and H_S. The fit window is 13–23 s, with per-period windows from 8 s. Each signal is fit by least squares to m + A1 at ω + A2 at 2ω (ω = 2π/1.993). The target is Stokes II, A1 = 59.75 mm and A2 = 12.94 mm, with phase kx + 3π/2 at absolute x. ESI StokesII and StokesIIIncident use the same origin and phase, so both solvers share this target.
+
+**The gauge method changed.** eta is now −h plus ∑ α × (exact chord length of the vertical line x = x_g through each cell quad on the current mesh). Every column checks to 1.000000 m at 8 s and at 23 s. The old s5 method used zmax − zmin of each cell. That overstates the height of sheared cells in the moving zone and gave the ±0.25 gauges a +35 mm mean bias. So the s5 box rms numbers carry a pitch-dependent bias; the static gauges (±1, ±1.25) are unaffected.
+
+**Waves, 13–23 s.** Columns: A1 in mm (ratio to target), phase relative to target, A2 in mm, mean in mm. "box" is the average of the ±0.25 gauges.
+
+| Run | x = −1.25 | −1 | box | +1 | +1.25 |
+|---|---|---|---|---|---|
+| plain fine | 59.6 (0.997), −1°, 12.1, +1.1 | 61.2 (1.023), −2°, 12.1, +1.3 | 53.1 (0.961), −8°, 10.1, +0.4 | 60.6 (1.015), −6°, 15.8, +1.5 | 61.8 (1.034), −9°, 15.4, +1.5 |
+| H_P | 59.8 (1.002), −2°, 11.6, +0.9 | 60.9 (1.020), −4°, 11.9, +1.1 | 52.3 (0.945), −8°, 10.1, +0.3 | 60.3 (1.008), −8°, 15.7, +1.3 | 60.8 (1.017), −11°, 15.0, +1.3 |
+| H_S | 65.6 (1.097), +1°, 10.9, −2.9 | 64.5 (1.080), −3°, 13.9, −3.3 | 54.2 (0.981), −3°, 14.2, −2.8 | 63.4 (1.062), −5°, 15.9, +1.9 | 63.4 (1.061), −6°, 15.8, +2.3 |
+
+At the box the A2 target is 9.2 mm.
+
+**Per-period |A1|/target** (windows start at 8.00, 9.99, 11.99, 13.98, 15.97, 17.96 and 19.96 s):
+
+| Run | Gauge | Ratio |
+|---|---|---|
+| plain fine | −1.25 | 0.996 0.998 0.999 0.997 0.997 0.996 0.999 |
+| plain fine | box | 0.951 0.943 0.946 0.947 0.948 0.948 0.947 |
+| plain fine | +1.25 | 1.027 1.028 1.030 1.030 1.031 1.034 1.034 |
+| H_P | −1.25 | 0.695 0.859 0.987 0.998 1.000 1.002 1.002 |
+| H_P | box | 0.617 0.777 0.916 0.945 0.935 0.930 0.931 |
+| H_P | +1.25 | 0.582 0.754 0.919 1.014 1.020 1.021 1.020 |
+| H_S | −1.25 | 0.999 1.089 1.095 1.096 1.098 1.090 1.101 |
+| H_S | box | 0.890 0.974 0.984 0.986 0.985 0.913 0.982 |
+| H_S | +1.25 | 0.908 1.018 1.049 1.051 1.050 1.062 1.072 |
+
+H_P's ramp finishes at the 13.98 s window (its linear inlet ramp plus travel time). H_S has reached its plateau by the 9.99 s window, but that plateau sits 9–10 % above target upstream and 5–7 % above target downstream. The fit window (13 s onward) is therefore past both ramps.
+
+**Means, 13–23 s.**
+
+| Run | Surge (mm) | Tension − T0 (N) | Pitch (deg) | Heave (mm) |
+|---|--:|--:|--:|--:|
+| plain fine | +8.10 | +0.232 | +0.67 | +1.2 |
+| H_P | +8.08 | +0.230 | +0.64 | +0.8 |
+| H_S | +9.62 | +0.276 | +1.13 | −0.4 |
+
+Gap from H_S to plain fine: +1.52 mm surge and +0.043 N tension. Their ratio, ΔT/Δx = 28.6 N/m, equals the mean stiffness of plain fine (0.232/8.10 mm = 28.7 N/m), so the gap is a steady extra force of about 0.043 N.
+
+**Stokes drift with no return current.** In the closed tank the return current is U = E/(ρch) = g H²/(8ch) = 17.3 mm/s, and the SWENSE incident lacks it. The drag of that current on the box is ½ρ C_d (draft × 0.2 m) U² = 0.002–0.005 N for C_d = 1–2. The Doppler change in wave drift is about 4U/c × 0.23 N = 0.008 N. Both are 5–20 times smaller than 0.043 N. The tension ratio, 0.276/0.232 = 1.19, is close to the ratio of squared amplitudes upstream, (65.6/59.6)² = 1.21. The mean-load gap therefore follows H_S's 10 % larger upstream wave, not a missing return current.
+
+**RAOs.** Each motion's A1 is divided by the box-gauge A1; phase is the motion minus the box gauge. Values in brackets are relative to plain fine.
+
+| Run | Surge (m/m) | Heave (m/m) | Pitch (deg/m) | Tension (N/m) |
+|---|---|---|---|---|
+| plain fine | 2.271, −88° | 1.120, −2° | 45.7, +19° | 11.13, −54° |
+| H_P | 2.295 (+1.1 %, +1.9°) | 1.121 (+0.2 %, +0.1°) | 46.6 (+1.8 %, +4.5°) | 11.30 (+1.5 %, +1.4°) |
+| H_S | 2.383 (+4.9 %, +3.8°) | 1.134 (+1.3 %, −3.6°) | 52.5 (+14.9 %, −5.4°) | 12.96 (+16.4 %, +3.1°) |
+
+Pitch is mostly 2nd harmonic. Plain fine has h1 2.43° and h2 3.21°; H_S has h1 2.85° (+17 %) and h2 2.64° (−18 %). Their peak-to-peak values agree (4.70° against 4.72°) only because the two errors offset. Tension in H_S has h1 0.703 N against 0.591 N, and h2 0.201 N against 0.152 N.
+
+**Verdict.** Only heave meets the 3 % test. The mean-load gap is 5–20 times larger than any return-current estimate. So the difference is not explained by the incident definition alone. The RAOs that differ are pitch (+15 % at 1st harmonic, −5°, with 2nd harmonic −18 %) and tension (+16 %); surge is borderline at +4.9 %. H_P matches plain fine within 2 % on every RAO, so the mesh is not the cause.
