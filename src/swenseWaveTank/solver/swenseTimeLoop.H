@@ -13,6 +13,10 @@
 const bool budgetLog =
     runTime.controlDict().lookupOrDefault<bool>("budgetLog", false);
 
+// Per-cell Uc term log (swenseUcCellLog.H), default off
+const bool ucCellLog =
+    runTime.controlDict().lookupOrDefault<bool>("ucCellLog", false);
+
 while (runTime.run())
 {
     // Courant numbers (logged) and, with adjustTimeStep yes, the new step
@@ -122,6 +126,13 @@ while (runTime.run())
         if (pimple.turbCorr())
         {
             turbulence->correct();
+        }
+
+        // Logging only: per-cell terms of the Uc equation (controlDict
+        // ucCellLog, default off), on the final fields of the step
+        if (ucCellLog && pimple.finalIter())
+        {
+            #include "swenseUcCellLog.H"
         }
     }
 

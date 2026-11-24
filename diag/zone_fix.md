@@ -744,3 +744,88 @@ In H_S2, etaI is 0.998 / 0.998 / 1.003 / 1.002 at ±1.25 and ±1, and etaS is 0.
 | H_S2 | −0.5 %, +7° | −0.2 %, −1° | −8.0 %, +10° | +4.5 %, +6° |
 
 **Conclusion.** The flux-consistent incident removes the mean-load gap (surge and tension within 3 % and 1 % of plain fine) and brings the surge and heave RAOs within 0.5 %. Two things remain. Pitch now lies on the other side of plain fine (RAO −8 %, +10°; peak-to-peak −12 %), and tension is +4.5 % in RAO and +6 % peak-to-peak. A scattered wave of 6–8 % also remains upstream. And H_S2 is unstable at 22.1 s.
+
+## H_S2 blow-up at 22.1 s: what departs first (no solver run; `diag/s8.py`, `diag/s8f.py`)
+
+**Method.** The data are the solver log at every step from 20.0 to 22.7 s (H_S: 2862 steps; H_S2: 14992 steps), the 4 MoorDyn line files, and the field writes every 0.1 s, with max-U cell locations taken from those writes. A quantity "departs" at the first time |H_S2 − H_S| exceeds 5× its rms over 20.0–21.5 s and stays above that for 0.02 s.
+
+**Order of departure:**
+
+| Quantity | Departs at (s) |
+|---|--:|
+| max\|Uc\| (all cells) | 21.751 |
+| max\|Uc\| air (\|z\| < 0.29 band) | 21.784 |
+| pitch rate | 22.151 |
+| pitch | 22.234 |
+| max\|Uc\| water | 22.241 |
+| min segment tension, lines 3 and 4 | 22.261 |
+| fairlead tension, lines 3 and 4 | 22.264 |
+
+These never leave their band: Courant number (held at 0.5 by adjustTimeStep), interface Co, lines 1 and 2, alpha1/alphaI bounds (always [0, 1]), max\|alpha1 − alphaI\|, and dt. dt in H_S2 does fall from about 1e-3 to 9e-5 after 21.7 s, because the Co limit then acts on the air jet.
+
+**The first departure is air Uc in the top cell row** (z = +0.492, directly below the atmosphere at z = 0.5) at x = +1.0 to +1.3: the coarse part outside the body zone, just inside the outlet relaxation zone.
+
+| t (s) | Cell | x (m) | \|Uc\| (m/s) | Uc (x, z) (m/s) |
+|--:|--:|--:|--:|---|
+| 21.7 | 9483 | +1.098 | 13.6 | (−2, −14) |
+| 21.8 | 9481 | +0.999 | 24.9 | (−14, −21) |
+| 22.0 | 9485 | +1.196 | 31.7 | |
+| 22.1 | 9486 | +1.245 | 69.7 | (−36, −60) |
+
+The jet points down into the tank and occupies the top two rows (cells 9452 and 9455 are the row below), drifting with the wave crest. H_S's top row stays at 3–4 m/s.
+
+**History of max air Uc per second.** H_S2: 5–6 m/s up to 19 s, 9.8 m/s in [20, 21), 23.9 m/s in [21, 22), then blow-up. H_S had a comparable excursion of 14.6 m/s in [19, 20) and recovered.
+
+**After the jet.** The water side follows: max\|U\| in water reaches 0.88–1.47 m/s at x ≈ +1.49, z ≈ +0.075 (interface, α ≈ 0.55, at the zone edge) from 22.1 s. Lines 3 and 4 go slack (minimum segment tension ≤ 0) at 21.76 s in H_S2 and at 21.67 s in H_S, so slackness happens in both runs and is not the trigger. Lines 1 and 2 first go slack at 22.26 s, only in H_S2, after pitch is already past −6°.
+
+**Pitch harmonics, 13–20.97 s.** Amplitude in degrees, with the change relative to plain fine in brackets:
+
+| Run | h1 | h2 | h3 |
+|---|---|---|---|
+| plain fine | 2.430 | 3.206 | 0.422 |
+| H_S | 2.784 (+14.6 %, −11.6°) | 2.665 (−16.9 %, −21.0°) | 0.755 (+79 %, −18.7°) |
+| H_S2 | 2.249 (−7.4 %, +1.4°) | 2.396 (−25.3 %, −17.1°) | 0.599 (+42 %, −14.0°) |
+
+The switch fixes the h1 phase but leaves h2 25 % low and 17° early.
+
+## H_S2 restart 21.4–21.8 s: terms of the Uc equation in the air jet
+
+Restart case `zonefix/hybrid/H_S2r` runs from the 21.4 s write of H_S2 to 21.8 s with the same switches. It uses solver build `private_uc`, which is private_fu plus the log-only switch `ucCellLog` ([swenseUcCellLog.H](../src/swenseWaveTank/solver/swenseUcCellLog.H), hooked in at the end of the last outer corrector in [swenseTimeLoop.H](../src/swenseWaveTank/solver/swenseTimeLoop.H)). The analysis script is [s9.py](s9.py).
+
+The logged cells are the top two rows (z = 0.477 and 0.492) at x 0.9–1.4: 22 cells in total. Each term is taken on the final fields of the step, in N/m³, with x and z components. The terms are ddt, convection, viscous, the incident mismatch brackets of incTerm, the cell closure (1 − lam) r_I, the face term −R[(1 − lamf) G_f], −grad pc, the gravity term −R[gh_f snGrad(Drho)], and the cell residual R. The log also records lam, w, rho and rhoI, plus pc_b, Uc_b, phiComp and snGrad pc on the 11 atmosphere faces above the cells.
+
+**Reproduction is close but not bit for bit.** On restart the solver rebuilds phi from the written fields, so the first max Co is 0.531 against 0.513 in H_S2. The time steps therefore differ from the first step on (21.401053 against 21.401087). MoorDyn also restarts from equilibrium (`MoorDyn_Init`).
+
+| Quantity | Max \|H_S2r − H_S2\|, 21.4–21.6 s | Max \|H_S2r − H_S2\|, 21.4–21.8 s |
+|---|--:|--:|
+| pitch | 0.22° | 0.22° |
+| pitch rate | 3.0°/s | 3.0°/s |
+| max\|Uc\| (24.9 m/s at 21.8 s in both runs) | 0.19 m/s | 0.19 m/s |
+| air max\|Uc\| | 1.3 m/s | 1.3 m/s |
+| fairlead tension | up to 0.56 N | up to 0.56 N |
+
+The jet grows exactly as in H_S2.
+
+**What grows first.** Each quantity is the maximum over the 22 cells. The growth time is the first step at which it reaches 1.5× (and 2×) its value over 21.40–21.41 s and stays there for 0.01 s.
+
+| Quantity | ×1.5 at (s) | ×2 at (s) | Value at 21.40 s | Max to 21.8 s | Cell |
+|---|--:|--:|--:|--:|--:|
+| **convection div(rhoPhi, Uc)** | **21.468** | **21.526** | 60 | 1690 | 9453 (x 1.147, z 0.477) |
+| incident mismatch (inc) | 21.476 | 21.541 | 38 | 629 | 9482 |
+| ddt(rho, Uc) | 21.497 | 21.532 | 25 | 949 | 9486 |
+| cell residual R | 21.502 | 21.580 | 13 | 397 | 9484 |
+| atmosphere inflow −phiComp/\|Sf\| (m/s) | 21.518 | 21.598 | 4.2 | 21.6 | top faces |
+| \|Uc\| (m/s) | 21.518 | 21.612 | 4.5 | 24.9 | 9483 |
+| \|Drho\|, alphaI | 21.523 | 21.599 | 0.47 kg/m³, 4.7e-4 | 1.71 kg/m³, 1.7e-3 | 9482 |
+| gravity term | 21.537 | 21.621 | 101 | 325 | 9482 |
+| −grad pc | 21.641 | 21.684 | 151 | 852 | 9452 |
+
+These terms stay negligible: the closure (1 − lam) r_I is zero to 21.6 s (max 38 later), the face term peaks at 0.43, and viscous stays below 0.15.
+
+**Readings:**
+- **The first term to grow is convection, div(rhoPhi, Uc), at 21.47 s in cell 9453, the second row from the top.** The incident mismatch bracket follows 0.01 s later in cell 9482 (top row), then ddt.
+- **The air is not clean in the incident field.** These are pure air cells (alpha1 ≤ 4e-6), but alphaI = 3.5e-4 to 1.7e-3 and rises through the window. That makes rhoI = 1.35 → 2.69 against rho = 1.00, so the gravity term −gh_f snGrad(Drho) is 70–330 N/m³ on air of density 1. The incident mismatch brackets, (rho − rhoI) times the incident ddt and convection, are non-zero for the same reason.
+- **The jet enters through the top boundary.** The atmosphere boundary has pc = 0 (fixedValue) and zeroGradient Uc. Over 0.05 s windows, the largest inflow through the top faces rises 5.1 → 8.5 m/s (21.40–21.60) → 21.6 m/s (21.80), and snGrad pc at those faces rises 446 → 1860 Pa/m. In cell 9481 Uc_z changes from −0.3 to −20 m/s between 21.67 and 21.80 s, with convection as the largest LHS term (up to 1050 N/m³).
+- w = 0 in all 22 cells for the whole run: these cells are outside the body zone, and at their x position the relaxation weight is still zero. lam = 1 to 21.6 s; from 21.614 s the ratio test (rhoI/rho > 2) sets lam = 0 in some top-row cells, which is when the closure term appears.
+
+No fix.
