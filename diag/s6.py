@@ -10,20 +10,23 @@ g={'__file__':T0+'steps12_22Nov/build/plot_day3.py','__name__':'c'};exec(src,g)
 T=1.993;H=0.1195;h=0.5;w=2*np.pi/T;k=1.555392701892035;s=np.tanh(k*h);ph0=1.5*np.pi
 A2c=k*H*H/4*(3-s*s)/(4*s**3)
 RUNS=[('plain fine','meshes/plain_fine'),('H_P','zonefix/hybrid/H_P'),('H_S','zonefix/hybrid/H_S')]
+RUNS+=[tuple(a.split('=')) for a in sys.argv[1:]]          # label=path relative to T0
 X=np.array((-1.25,-1.,-.25,.25,1.,1.25))
 tl=[round(8+.1*i,1) for i in range(151)]
 cache=os.environ.get('S6CACHE','/tmp/s6_eta.pkl')
-if os.path.exists(cache):L=pickle.load(open(cache,'rb'))
-else:
-    L={}
+L=pickle.load(open(cache,'rb')) if os.path.exists(cache) else {}
+if 1:
     for n,p in RUNS:
+        if n in L:continue
         P=T0+p;C=cells(P);P0=pts(P+'/constant/polyMesh/points')
         y0=P0[:,1].min();Q=[[i for i in c if abs(P0[i,1]-y0)<1e-9] for c in C]   # front-face quad of each cell
         Q=np.array([sorted(q,key=lambda i,c=P0[q].mean(0):np.arctan2(P0[i,2]-c[2],P0[i,0]-c[0])) for q in Q])
         near=[np.where((P0[Q,0].min(1)<x+.15)&(P0[Q,0].max(1)>x-.15))[0] for x in X]
         M=[]
         for t in tl:
-            d='%g'%t;fp=f'{P}/{d}/polyMesh/points';Pt=pts(fp) if os.path.exists(fp) else P0;q=field(f'{P}/{d}/alpha.water');v=[]
+            d='%g'%t
+            if not os.path.exists(f'{P}/{d}/alpha.water'):M.append([np.nan]*len(X));continue
+            fp=f'{P}/{d}/polyMesh/points';Pt=pts(fp) if os.path.exists(fp) else P0;q=field(f'{P}/{d}/alpha.water');v=[]
             for x,nb in zip(X,near):            # vertical line x: exact chord length through each (convex) quad
                 xa=Pt[Q[nb],0];za=Pt[Q[nb],2];xb=np.roll(xa,-1,1);zb=np.roll(za,-1,1)
                 cr=((xa<=x)&(x<xb))|((xb<=x)&(x<xa));tt=np.where(cr,(x-xa)/np.where(cr,xb-xa,1),np.nan);zc=za+tt*(zb-za)
@@ -37,9 +40,9 @@ def fit(t,y):
     B=np.c_[np.ones_like(t),np.cos(w*t),np.sin(w*t),np.cos(2*w*t),np.sin(2*w*t)];c=np.linalg.lstsq(B,y,rcond=None)[0]
     return c[0],c[1]+1j*c[2],c[3]+1j*c[4]          # Re(A e^{-iwt}) = a cos + b sin with A = a + i b
 tgt1=lambda x:H/2*np.exp(1j*(k*x+ph0)); tgt2=lambda x:A2c*np.exp(2j*(k*x+ph0))
-sel=(tl>=13-1e-9)
+T1=float(os.environ.get('S6T1',23));sel=(tl>=13-1e-9)&(tl<=T1+1e-9)
 print('target: A1 %.2f mm, A2 %.2f mm, mean 0'%(H/2e-3,A2c*1e3))
-print('WAVE 13-23 s: A1 mm (ratio to target) | phase vs target deg | A2 mm | mean mm')
+print('WAVE 13-%g s:'%T1+' A1 mm (ratio to target) | phase vs target deg | A2 mm | mean mm')
 G=[0,1,'box',4,5];R={}
 for n,_ in RUNS:
     E=L[n];out=[]
@@ -54,7 +57,7 @@ for n,_ in RUNS:
     print('%-10s'%n+' '.join('%s: %.1f(%.3f) %+.1f %.2f %+.2f |'%(l,abs(a1)*1e3,abs(a1)/abs(t1),np.degrees(np.angle(a1/t1)),abs(a2)*1e3,m*1e3) for l,m,a1,a2,t1,t2 in out))
 print('A2 target mm at gauges:',' '.join('%.2f'%abs(o[5]*1e3) for o in R['plain fine']))
 print('PER PERIOD |A1|/target from 8 s (window start):')
-nP=int((23-8)/T)
+nP=int((T1-8)/T)
 for n,_ in RUNS:
     for gi,lab in ((0,'-1.25'),('box','box'),(5,'+1.25')):
         row=[]
@@ -64,11 +67,11 @@ for n,_ in RUNS:
             else:row.append(abs(fit(tl[ss],L[n][ss,gi])[1])/abs(tgt1(X[gi])))
         print('%-10s %-6s'%(n,lab)+' '.join('%.3f'%v for v in row))
 print('   windows start',' '.join('%.2f'%(8+p*T) for p in range(nP)))
-print('MEANS 13-23 s: surge mm (x - x0) | tension N (T - T0) | pitch deg | heave mm')
+print('MEANS 13-%g s:'%T1+' surge mm (x - x0) | tension N (T - T0) | pitch deg | heave mm')
 Mo={};ref={}
 for n,p in RUNS:
     S=g['cfd'](T0+p);Mo[n]=S
-    o={};u=np.linspace(13,23,5001)
+    o={};u=np.linspace(13,T1,5001)
     for kk,(t,y) in S.items():
         v=np.interp(u,t,y);y0=y[0] if kk=='surge' else 0;m,a1,a2=fit(u,v);o[kk]=(m-y0,a1,a2)
     ref[n]=o

@@ -60,7 +60,8 @@ StokesIIIncident::StokesIIIncident
     h_(0),
     L_(0),
     K_(0),
-    omega_(0)
+    omega_(0),
+    fU_(1)
 {
     const word waveDictName(coeffDict_.lookup("waveDict"));
     const dictionary& wd = subDict(waveDictName);
@@ -130,6 +131,37 @@ StokesIIIncident::StokesIIIncident
         << " deg, phase " << phase_ << ", depth " << h_ << " m (bottom z "
         << zBottom_ << "), L " << L_ << " m, K " << K_ << " 1/m, c "
         << omega_/K_ << " m/s; no ramp" << endl;
+
+    // Switch fluxConsistentU (waveTheoryForcingCoeffs, default off): factor fU
+    // on the first-order velocity terms so that the first harmonic of the
+    // column flux Q = int_{-h}^{eta} u dz equals c*H/2 (= c*eta_1). Stokes II
+    // integrated to eta gives Q_1 = 1.034 c eta_1 for the BOX3 wave (a
+    // third-order term), and the transported alphaI follows Q_1/c, not H/2.
+    // Q(th) = fU*A(th) + B(th), both analytic in z; Q_1 = fU*A_1 + B_1.
+    if (coeffDict_.lookupOrDefault<bool>("fluxConsistentU", false))
+    {
+        const scalar k = K_, h = h_, H = H_, om = omega_;
+        const scalar s = Foam::tanh(k*h);
+        const label n = 3600;
+        scalar A1 = 0, B1 = 0;
+        for (label i = 0; i < n; i++)
+        {
+            const scalar th = 2.0*M_PI*(i + 0.5)/n;
+            const scalar e =
+                H*0.5*Foam::cos(th)
+              + k*H*H/4.0*(3.0 - s*s)/(4.0*pow3(s))*Foam::cos(2.0*th);
+            const scalar A =
+                H*0.5*om*Foam::cos(th)*Foam::sinh(k*(h + e))/(k*Foam::sinh(k*h));
+            const scalar B =
+                3.0/4.0*H*H/4.0*om*k*Foam::sinh(2.0*k*(h + e))
+               /(2.0*k*pow4(Foam::sinh(k*h)))*Foam::cos(2.0*th);
+            A1 += 2.0*A*Foam::cos(th)/n;
+            B1 += 2.0*B*Foam::cos(th)/n;
+        }
+        fU_ = (om/k*H*0.5 - B1)/A1;
+        Info<< "StokesIIIncident fluxConsistentU: Q_1/(c H/2) without the"
+            << " factor " << (A1 + B1)/(om/k*H*0.5) << ", fU " << fU_ << endl;
+    }
 }
 
 
@@ -216,11 +248,11 @@ vector StokesIIIncident::U
 
     // StokesIIWaveModel.C:96-103, z measured from the bottom
     scalar u =
-        H*0.5*omega*Foam::cos(th)*Foam::cosh(k*z)/Foam::sinh(k*h)
+        fU_*H*0.5*omega*Foam::cos(th)*Foam::cosh(k*z)/Foam::sinh(k*h)
       + 3.0/4.0*H*H/4.0*omega*k*Foam::cosh(2.0*k*z)/pow4(Foam::sinh(k*h))
        *Foam::cos(2.0*th);
     scalar w =
-        H*0.5*omega*Foam::sin(th)*Foam::sinh(k*z)/Foam::sinh(k*h)
+        fU_*H*0.5*omega*Foam::sin(th)*Foam::sinh(k*z)/Foam::sinh(k*h)
       + 3.0/4.0*H*H/4.0*omega*k*Foam::sinh(2.0*k*z)/pow4(Foam::sinh(k*h))
        *Foam::sin(2.0*th);
     const scalar v = u*Foam::sin(angle_);

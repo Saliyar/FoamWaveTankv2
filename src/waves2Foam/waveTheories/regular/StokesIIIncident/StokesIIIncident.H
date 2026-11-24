@@ -104,6 +104,9 @@ protected:
         scalar K_;
         scalar omega_;
 
+        //- Factor on the first-order velocity (switch fluxConsistentU)
+        scalar fU_;
+
 
     // Protected member functions
 

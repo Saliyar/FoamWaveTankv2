@@ -667,3 +667,80 @@ Gap from H_S to plain fine: +1.52 mm surge and +0.043 N tension. Their ratio, Δ
 Pitch is mostly 2nd harmonic. Plain fine has h1 2.43° and h2 3.21°; H_S has h1 2.85° (+17 %) and h2 2.64° (−18 %). Their peak-to-peak values agree (4.70° against 4.72°) only because the two errors offset. Tension in H_S has h1 0.703 N against 0.591 N, and h2 0.201 N against 0.152 N.
 
 **Verdict.** Only heave meets the 3 % test. The mean-load gap is 5–20 times larger than any return-current estimate. So the difference is not explained by the incident definition alone. The RAOs that differ are pitch (+15 % at 1st harmonic, −5°, with 2nd harmonic −18 %) and tension (+16 %); surge is borderline at +4.9 %. H_P matches plain fine within 2 % on every RAO, so the mesh is not the cause.
+
+## Incident amplitude: etaI against eta, the fluxConsistentU switch, H_S2
+
+### A. Splitting H_S into incident and scattered parts (`diag/s7.py`, s6 line cut, 13–23 s)
+
+First-harmonic amplitude relative to the Stokes II target, with phase relative to target in brackets:
+
+| Run | Field | x = −1.25 | −1 | +1 | +1.25 |
+|---|---|---|---|---|---|
+| H_S | eta | 1.097 (+1°) | 1.080 (−3°) | 1.062 (−5°) | 1.061 (−6°) |
+| H_S | etaI | 1.034 (+1°) | 1.033 (0°) | 1.037 (−1°) | 1.038 (0°) |
+| H_S | etaS = eta − etaI | 0.063 | 0.069 | 0.087 | 0.108 |
+| F3b (coarse, empty) | eta = etaI | 1.027 (+6°) | 1.026 (+5°) | 1.040 (+5°) | 1.039 (+6°) |
+| H_P | \|eta − target\| | 0.042 | 0.067 | 0.136 | 0.191 |
+
+etaI is 3–4 % high even in the empty tank, so neither verdict branch applies cleanly (≈1.0 or 1.06–1.10). The high incident is the part that can be fixed and gated, so the work went on to B. The excess is not built up by advection: in H_S, `diag/s7x.py` shows A1(etaI) jumping from 1.008 at x = −1.8 to 1.036 at x = −1.6 (the inner edge of the relaxation zone), then staying flat across the interior.
+
+### B. Source of the excess
+
+- **Amplitude input:** `src/waves2Foam/waveTheories/regular/StokesIIIncident/StokesIIIncident.C:77` reads H = waveHeight (0.1195) from the inlet dictionary. The log confirms H 0.1195, L 4.0396, K 1.5554 and depth 0.5.
+- **eta:** the same file at :195–196 computes H/2 cos θ + kH²/4 (3 − σ²)/(4σ³) cos 2θ. The coefficients match ESI StokesIIWaveModel.C:71-73.
+- **Velocity:** :250-256 (u, w) use H/2 ω cosh(kz)/sinh(kh) + (3/16) H² ω k cosh(2kz)/sinh⁴(kh), the same as ESI.
+- **Ramp:** `swenseIncident.C:535` applies `swenseRamp::factor`, which is 1 after rampTsoft = 12 s.
+- **alphaH:** the relaxation target, the wall-BC target and the zone-reset target all come from `targetAlpha` (the analytic eta, exact cut when alphaHExact is on; `solver/swenseTimeLoop.H:93-94`).
+- **alphaI:** in the interior (w = 0), alphaI is not set from the analytic eta. It is transported by the projected incident flux (`alphaStep.H`, then `solver/swenseAlphaRelax.H:9`).
+
+**Cause.** Stokes II is consistent only to second order. Integrating its velocity up to the free surface gives a column flux whose first harmonic is too large: Q₁ = ∫₋ₕ^η u dz has Q₁/(c·H/2) = 1.0342 for this wave (analytic; 1.0 when integrated to z = 0). Transported alphaI then settles at η₁ = Q₁/c, which is 3.4 % above H/2, matching the measured 1.033–1.038.
+
+**Fix (switch, default off).** `fluxConsistentU true;` in `waveTheoryForcingCoeffs` multiplies the first-order u and w terms by fU, chosen so that Q₁ = c·H/2. Both column integrals are analytic in z and averaged over 3600 phase points (`StokesIIIncident.C:140-165`). For BOX3, fU = 0.96639. eta and the pressure are not changed.
+
+libwaves2Foam is now built privately from this source. Switch off, F3c0 against F3b: alpha and U at 15 s are bit-identical.
+
+**Gate: coarse empty tank, 15 s, switch on (F3c), window 13–15 s.**
+
+| Run | etaI = eta at x = −1 | x = +1 | Uc |
+|---|--:|--:|--:|
+| F3c (switch on) | 0.994 | 1.006 | exactly 0 |
+| F3c0 (switch off) | 1.030 | 1.041 | exactly 0 |
+
+**The gate passes.** The phase stays at +5° on the coarse mesh; it is not gated and is unchanged by the switch.
+
+### C. H_S2 = H_S plus fluxConsistentU (hybrid mesh, 23 s requested)
+
+**H_S2 crashed at 22.69 s.** Pitch departed at 22.1 s and reached −18.8° by 22.45 s, against a normal range of −3° to +7°. The time step collapsed to 1e-87, and MoorDyn raised a floating-point exception in Line::GetLineOutput. H_S, which has the same set-up with the switch off, ran to 23 s. Up to 22.1 s the H_S2 motions were regular and smaller than H_S. The run used 6319 s to 22.69 s, against 4124 s for H_S over 23 s.
+
+All rows below use the window 13–20.97 s (4 whole periods).
+
+**Waves:** first-harmonic amplitude relative to target, at x = −1.25 / −1 / box / +1 / +1.25:
+
+| Run | −1.25 | −1 | box | +1 | +1.25 |
+|---|--:|--:|--:|--:|--:|
+| plain fine | 0.997 | 1.023 | 0.961 | 1.014 | 1.033 |
+| H_P | 1.002 | 1.019 | 0.948 | 1.007 | 1.016 |
+| H_S | 1.098 | 1.080 | 0.981 | 1.063 | 1.059 |
+| H_S2 | 1.055 | 1.039 | 0.967 | 1.008 | 1.008 |
+
+In H_S2, etaI is 0.998 / 0.998 / 1.003 / 1.002 at ±1.25 and ±1, and etaS is 0.06–0.08 (H_S had 0.07–0.11). H_S2 mean levels are −1.3 mm upstream and +0.6 to +0.9 mm downstream (H_S: −3.2 and +2.3 mm).
+
+**Motions and means.** Amplitude columns are peak-to-peak errors against plain fine.
+
+| Run | Surge | Heave | Pitch | Tension | Mean surge (mm) | Mean tension (N) | Mean pitch (deg) |
+|---|--:|--:|--:|--:|--:|--:|--:|
+| plain fine | 0 | 0 | 0 | 0 | 8.07 | 0.2325 | 0.68 |
+| plain coarse | −3.0 % | −7.3 % | −40.3 % | +4.8 % | | | |
+| H_P | −0.8 % | −1.5 % | 0.0 % | −1.1 % | 8.00 | 0.2288 | 0.64 |
+| H_S | +6.5 % | +4.4 % | −0.7 % | +21.6 % | 10.37 | 0.2821 | 1.11 |
+| H_S2 | −0.4 % | −0.5 % | −12.4 % | +6.0 % | 7.82 | 0.2308 | 0.85 |
+
+**RAOs** (first harmonic over the box-gauge first harmonic), against plain fine:
+
+| Run | Surge | Heave | Pitch | Tension |
+|---|---|---|---|---|
+| H_P | +0.6 %, +2° | 0.0 %, 0° | +0.7 %, +5° | +1.0 %, +1° |
+| H_S | +5.3 %, +3° | +1.6 %, −4° | +12.3 %, −7° | +17.9 %, +2° |
+| H_S2 | −0.5 %, +7° | −0.2 %, −1° | −8.0 %, +10° | +4.5 %, +6° |
+
+**Conclusion.** The flux-consistent incident removes the mean-load gap (surge and tension within 3 % and 1 % of plain fine) and brings the surge and heave RAOs within 0.5 %. Two things remain. Pitch now lies on the other side of plain fine (RAO −8 %, +10°; peak-to-peak −12 %), and tension is +4.5 % in RAO and +6 % peak-to-peak. A scattered wave of 6–8 % also remains upstream. And H_S2 is unstable at 22.1 s.
