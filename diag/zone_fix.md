@@ -686,16 +686,16 @@ etaI is 3–4 % high even in the empty tank, so neither verdict branch applies c
 
 ### B. Source of the excess
 
-- **Amplitude input:** `src/waves2Foam/waveTheories/regular/StokesIIIncident/StokesIIIncident.C:77` reads H = waveHeight (0.1195) from the inlet dictionary. The log confirms H 0.1195, L 4.0396, K 1.5554 and depth 0.5.
-- **eta:** the same file at :195–196 computes H/2 cos θ + kH²/4 (3 − σ²)/(4σ³) cos 2θ. The coefficients match ESI StokesIIWaveModel.C:71-73.
+- **Amplitude input:** `src/waves2Foam/waveTheories/regular/StokesIIIncident/StokesIIIncident.C:78` reads H = waveHeight (0.1195) from the inlet dictionary. The log confirms H 0.1195, L 4.0396, K 1.5554 and depth 0.5.
+- **eta:** the same file at :197–198 computes H/2 cos θ + kH²/4 (3 − σ²)/(4σ³) cos 2θ. The coefficients match ESI StokesIIWaveModel.C:71-73.
 - **Velocity:** :250-256 (u, w) use H/2 ω cosh(kz)/sinh(kh) + (3/16) H² ω k cosh(2kz)/sinh⁴(kh), the same as ESI.
 - **Ramp:** `swenseIncident.C:535` applies `swenseRamp::factor`, which is 1 after rampTsoft = 12 s.
-- **alphaH:** the relaxation target, the wall-BC target and the zone-reset target all come from `targetAlpha` (the analytic eta, exact cut when alphaHExact is on; `solver/swenseTimeLoop.H:93-94`).
+- **alphaH:** the relaxation target, the wall-BC target and the zone-reset target all come from `targetAlpha` (the analytic eta, exact cut when alphaHExact is on; `solver/swenseTimeLoop.H:36, 98`).
 - **alphaI:** in the interior (w = 0), alphaI is not set from the analytic eta. It is transported by the projected incident flux (`alphaStep.H`, then `solver/swenseAlphaRelax.H:9`).
 
 **Cause.** Stokes II is consistent only to second order. Integrating its velocity up to the free surface gives a column flux whose first harmonic is too large: Q₁ = ∫₋ₕ^η u dz has Q₁/(c·H/2) = 1.0342 for this wave (analytic; 1.0 when integrated to z = 0). Transported alphaI then settles at η₁ = Q₁/c, which is 3.4 % above H/2, matching the measured 1.033–1.038.
 
-**Fix (switch, default off).** `fluxConsistentU true;` in `waveTheoryForcingCoeffs` multiplies the first-order u and w terms by fU, chosen so that Q₁ = c·H/2. Both column integrals are analytic in z and averaged over 3600 phase points (`StokesIIIncident.C:140-165`). For BOX3, fU = 0.96639. eta and the pressure are not changed.
+**Fix (switch, default off).** `fluxConsistentU true;` in `waveTheoryForcingCoeffs` multiplies the first-order u and w terms by fU, chosen so that Q₁ = c·H/2. Both column integrals are analytic in z and averaged over 3600 phase points (`StokesIIIncident.C:135-164`). For BOX3, fU = 0.96639. eta and the pressure are not changed.
 
 libwaves2Foam is now built privately from this source. Switch off, F3c0 against F3b: alpha and U at 15 s are bit-identical.
 
