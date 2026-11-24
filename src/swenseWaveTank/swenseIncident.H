@@ -263,6 +263,20 @@ public:
         //  UfInc with the linear face value of alphaI, and pInc for output
         void blend(const volScalarField& alphaI);
 
+        //- Exact wetted volume fraction below the ramped incident surface at
+        //  time t: cells cut on their current points (swenseSurface, the
+        //  routine of incidentResetInZone), boundary faces by the wetted face
+        //  area. Cells whose points are all below (above) the surface are
+        //  1 (0) without a cut.
+        tmp<volScalarField> exactAlpha(const scalar t) const;
+
+        //- Relaxation and initial target: exactAlpha(t) with waveProperties
+        //  alphaHExact on, otherwise blendAlpha(t)
+        tmp<volScalarField> targetAlpha(const scalar t) const;
+
+        //- waveProperties alphaHExact (default off)
+        static bool alphaHExact(const objectRegistry& db);
+
         //- Cell blend of the listed cells for the fractions gamma (clipped to
         //  [0, 1] here), at the time of the last evaluate(): u = mI/rhoI and
         //  p = gamma pW + (1 - gamma) pA, as blend() gives in those cells.

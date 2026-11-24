@@ -7,6 +7,7 @@
 #include "volFields.H"
 #include "swenseIncident.H"
 #include "swenseRamp.H"
+#include "swenseSurface.H"
 #include "IOdictionary.H"
 
 // * * * * * * * * * * * * * * * * * Constructors * * * * * * * * * * * * * * //
@@ -96,6 +97,28 @@ void Foam::swenseWaveAlphaFvPatchScalarField::updateCoeffs()
     const scalar Tsoft = swenseRamp::Tsoft(mesh.thisDb());
     const scalar f = swenseRamp::factor(Tsoft, t);
     const vectorField& Cf = this->patch().Cf();
+
+    // alphaHExact on: exact wetted face fraction (the cut of swenseSurface)
+    if (swenseIncident::alphaHExact(mesh.thisDb()))
+    {
+        swenseSurface surf(mesh, ext, t);
+        const pointField& P = mesh.points();
+        const faceList& F = mesh.faces();
+        const label start = this->patch().start();
+
+        forAll(Cf, facei)
+        {
+            const scalar A = F[start + facei].mag(P);
+            refValue()[facei] = A > VSMALL
+              ? min(max(surf.wetArea(start + facei)/A, scalar(0)), scalar(1))
+              : 0.0;
+        }
+
+        refGrad() = 0.0;
+        valueFraction() = 1.0;
+        mixedFvPatchScalarField::updateCoeffs();
+        return;
+    }
 
     forAll(Cf, facei)
     {

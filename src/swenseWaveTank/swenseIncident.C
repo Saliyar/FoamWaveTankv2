@@ -6,6 +6,7 @@
 #include "gravityMeshObject.H"
 #include "Grid2Grid.H"
 #include "waveTheoryForcing.H"
+#include "swenseSurface.H"
 
 #include <cmath>
 #include <map>
@@ -738,6 +739,117 @@ void Foam::swenseIncident::sidePressure
 
     pHyd.correctBoundaryConditions();
     pDyn.correctBoundaryConditions();
+}
+
+
+bool Foam::swenseIncident::alphaHExact(const objectRegistry& db)
+{
+    return
+        db.foundObject<IOdictionary>("waveProperties")
+     && db.lookupObject<IOdictionary>("waveProperties")
+            .getOrDefault<Switch>("alphaHExact", false);
+}
+
+
+Foam::tmp<Foam::volScalarField>
+Foam::swenseIncident::exactAlpha(const scalar t) const
+{
+    tmp<volScalarField> talpha
+    (
+        new volScalarField
+        (
+            IOobject("alphaExact", mesh_.time().timeName(), mesh_,
+                IOobject::NO_READ, IOobject::NO_WRITE),
+            mesh_,
+            dimensionedScalar("alphaExact", dimless, 0.0)
+        )
+    );
+    volScalarField& alpha = talpha.ref();
+
+    swenseSurface surf(mesh_, ext_, t);
+
+    // Signed distance d = z - eta at every mesh point, as the cut uses it
+    const pointField& P = mesh_.points();
+    scalarField d(P.size());
+    {
+        const scalar Tsoft = swenseRamp::Tsoft(mesh_.thisDb());
+        const scalar f = Tsoft > 0 ? swenseRamp::factor(Tsoft, t) : 1.0;
+        forAll(P, pi)
+        {
+            d[pi] = P[pi].z() - f*ext_.eta(P[pi], t);
+        }
+    }
+
+    const labelListList& cP = mesh_.cellPoints();
+    const scalarField& V = mesh_.V();
+
+    forAll(alpha, c)
+    {
+        scalar dMin = GREAT, dMax = -GREAT;
+        for (const label pi : cP[c])
+        {
+            dMin = min(dMin, d[pi]);
+            dMax = max(dMax, d[pi]);
+        }
+        if (dMax <= 0)
+        {
+            alpha[c] = 1.0;
+        }
+        else if (dMin >= 0)
+        {
+            alpha[c] = 0.0;
+        }
+        else
+        {
+            alpha[c] = min(max(surf.wetVolume(c)/V[c], scalar(0)), scalar(1));
+        }
+    }
+
+    // Boundary faces: wetted face fraction
+    const faceList& F = mesh_.faces();
+    forAll(alpha.boundaryField(), patchi)
+    {
+        fvPatchScalarField& ab = alpha.boundaryFieldRef()[patchi];
+        const label start = mesh_.boundary()[patchi].start();
+        forAll(ab, i)
+        {
+            const label facei = start + i;
+            scalar dMin = GREAT, dMax = -GREAT;
+            for (const label pi : F[facei])
+            {
+                dMin = min(dMin, d[pi]);
+                dMax = max(dMax, d[pi]);
+            }
+            if (dMax <= 0)
+            {
+                ab[i] = 1.0;
+            }
+            else if (dMin >= 0)
+            {
+                ab[i] = 0.0;
+            }
+            else
+            {
+                const scalar A = F[facei].mag(P);
+                ab[i] = A > VSMALL
+                  ? min(max(surf.wetArea(facei)/A, scalar(0)), scalar(1))
+                  : 0.0;
+            }
+        }
+    }
+
+    return talpha;
+}
+
+
+Foam::tmp<Foam::volScalarField>
+Foam::swenseIncident::targetAlpha(const scalar t) const
+{
+    if (alphaHExact(mesh_.thisDb()))
+    {
+        return exactAlpha(t);
+    }
+    return tmp<volScalarField>(new volScalarField(blendAlpha(t)));
 }
 
 

@@ -33,7 +33,8 @@ while (runTime.run())
         incident.evaluate(runTime.value());
 
         alphaH.primitiveFieldRef() =
-            incident.blendAlpha(runTime.value()).primitiveField();
+            incident.targetAlpha(runTime.value())().primitiveField();
+        #include "swenseAlphaHLog.H"
 
         // Steps 1a and 2: both fractions by the same routine, with the fluxes
         // and velocities of the previous level
@@ -94,7 +95,8 @@ while (runTime.run())
             incident.evaluate(runTime.value());
 
             alphaH.primitiveFieldRef() =
-                incident.blendAlpha(runTime.value()).primitiveField();
+                incident.targetAlpha(runTime.value())().primitiveField();
+            #include "swenseAlphaHLog.H"
 
             #include "alphaStep.H"
             #include "swenseAlphaRelax.H"

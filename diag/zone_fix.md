@@ -547,3 +547,67 @@ Run `zonefix/M10`, coarse, test 2 settings, wall time 326 s.
 - M10 differs from test 2 in three switches at once (discrete hydrostatics, incidentAlphaWall, reset), so the gain cannot be assigned to the reset alone.
 
 Scripts: diag/cmp_fields.py (on/off field difference), diag/eta_wall.py (side split, case path), diag/s4.py. Build `private_rz`.
+
+## alphaHExact and the hybrid mesh (H_P, H_S)
+
+### 1 Switch alphaHExact (waveProperties, default off)
+- With the switch on, alphaH is the exact wetted fraction below the ramped etaHOS: the current cell polygon is cut by `swenseSurface::wetVolume`, the same routine incidentResetInZone uses. Code: `swenseIncident::exactAlpha` / `targetAlpha` / `alphaHExact` (src/swenseWaveTank/swenseIncident.C).
+- The same target is used in all three places alphaH is targeted:
+  - the relaxation target (swenseTimeLoop.H, both paths, plus the initial alphaI in swenseSetup.H);
+  - the wall BC swenseWaveAlpha (exact wetted face fraction, `wetArea`);
+  - the zone reset, which already used the cut.
+- Log line: `SWENSE alphaHExact: max|exact - blend|` (solver/swenseAlphaHLog.H).
+- With the switch off, OFF3 is bit-identical to B05 at 0.3 s (alphaI, alpha.water, U, Uc, p, pc).
+
+| Check | max \|exact − blend\| |
+|---|--:|
+| Still water, coarse (SX0), initial | 2.2e-10 (blendThickness 0.0438666667 is dz = 0.1316/3 to 10 digits only) |
+| Still water, hybrid (blendThickness 0.01316 exact), initial | 9.2e-15 |
+| Waves, coarse M10X, 23 s | max 0.056, median per step 0.048 |
+| Waves, hybrid H_S, 23 s | max 0.067, median 0.052, p95 0.063 |
+
+- On coarse, the error jumps from 0.009 to 0.051 at t ≈ 6 s. That is when the ramped crest enters the 0.049 m rows above z = 0.053, and the blend assumes dz = delta.
+- M10X (M10 plus alphaHExact) matches M10 to within 0.4 % on every motion and 0.1 mm on the waves. On its own the switch changes little.
+
+### 2 Hybrid mesh (diag/mkHybrid.py, conformal blockMesh, no hanging nodes)
+- **x:** the fine dx 0.0125 for |x| < 0.6 m (16 cells across the box), then 14 cells graded at q = 1.097 out to |x| = 0.975, then coarse dx 0.049 out to ±2.5. That gives 186 columns; the largest ratio is 1.097.
+- **z:** the fine rows (5 × 0.0121 below the box, 10 × 0.0132 box rows, 5 × 0.0147 above) run from z = −0.079 (below the box bottom) to 0.127 (above the max crest).
+  - Below them, 14 graded rows run down to the floor; above them, 15 graded rows reach z = 0.455; then 3 top rows of 0.015.
+  - The same rows run across the tank, 52 in total. The largest ratio is 1.117, and only at the fine rows' own step from 0.0132 to 0.0147.
+- **checkMesh:** OK, non-orthogonality 0, max aspect ratio 4.05.
+- **Mesh motion:** moving points lie at |x| ≤ 0.49 (inside the fine part). Of the 1496 points in the top 3 rows (z ≥ 0.455), none moves.
+- **Cells:** hybrid 9512; coarse 1088 (8.7×); fine 15040 (0.63×).
+
+### 3 Gauges
+- x = ±0.25 (box): linear between the two columns that straddle x at t = 0, moving with the mesh.
+- x = ±1 (graded band) and **x = ±1.25 (coarse part, |x| ≥ 0.975, outside the SWENSE relaxation zones |x| > 1.5)**: linear in x between static columns.
+- The box sampling changed from s4.py, where nearest-column tie-breaking could double the value (plain coarse at −0.25: 8.0 against 16.0 mm). The box and ±1 values below therefore differ from the M10 table above. diag/s5.py recomputes all rows.
+
+### 4 Runs (23 s, serial)
+- **Ramp:** 12 s in both runs, but the shape differs. H_P uses the waveModels inlet ramp (linear t/12, inlet only, no relaxation zones). H_S uses rampTsoft 12 (sin(π/2·t/12), everywhere).
+- **H_S:** SWENSE with discrete hydrostatics, incidentAlphaWall, incidentResetInZone and alphaHExact on; zone 1.0 m; blendThickness 0.01316; dt 2e-4; build `private_hx`.
+- **H_P:** plain waveIsoFoam (StokesII inlet), still-water start from setAlphaField (plane z = 0, normal (0 0 −1)).
+- **Initial eta error** (diag/eta0.py, column integral, plus a sidedness check):
+  - H_P: 7.8e-16 m.
+  - H_S after one step (t = 2.4e-4 s, includes the ramped wave): 1.1e-6 m.
+- **First H_P attempt failed.** With normal (0 0 1) the water sat above z = 0. The column integral cannot see this (−0.5 + 0.5 = 0 either way): the box fell and MoorDyn hit SIGFPE at 0.24 s. eta0.py now checks the sidedness.
+
+### 5 Result against plain fine
+
+| Run | Cells | Surge | Heave | Pitch | Tension | Box ±0.25 (mm) | ±1 (mm) | Coarse ±1.25 (mm) | Core-h |
+|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|
+| Plain fine | 15040 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 5.25 |
+| Plain coarse | 1088 | −3.0 % | −7.2 % | −39.7 % | +5.0 % | 13.1 | 9.4 | 9.6 | 0.07 |
+| **H_P** (plain, hybrid) | 9512 | **−0.6 %** | **−1.5 %** | **+0.7 %** | **−0.9 %** | **4.6** | **1.3** | **1.5** | 3.01 |
+| H_S (SWENSE, hybrid) | 9512 | +6.0 % | +4.2 % | +0.6 % | +19.6 % | 11.9 | 5.3 | 6.9 | 1.14 |
+| (SW M10, coarse) | 1088 | +6.8 % | +2.9 % | −17.4 % | +20.7 % | 11.2 | 5.3 | 6.4 | 0.09 |
+
+Against experiment: plain fine +11.0 / +6.7 / +8.1 / −10.8 %; H_P +10.3 / +5.0 / +8.9 / −11.6 %; H_S +17.7 / +11.2 / +8.8 / +6.7 %.
+
+**Result.**
+- **Plain waveIsoFoam on the hybrid mesh reproduces plain fine:** every motion within 1.5 %, waves within 1.3 mm at ±1. It costs 0.57× the core-hours (3.0 against 5.25 h).
+- **SWENSE on the same mesh gets the pitch right (+0.6 %), but surge and tension carry the same bias as on coarse** (+6 %, +20 %). Its waves are no better than M10 on the coarse mesh: 5.3 mm at ±1, 6.9 at ±1.25, 11.9 at the box.
+- The SWENSE error is therefore not set by the mesh resolution at the box. A refined mesh fixes plain but not SWENSE.
+- H_S is 2.6× cheaper than H_P (dt 2e-4 fixed against H_P's adaptive dt from 1.25e-3).
+
+Scripts: diag/mkHybrid.py (blockMeshDict generator), diag/eta0.py (still-water level and sidedness), diag/s5.py (table; extra runs as label=path). Build `private_hx`.

@@ -208,8 +208,18 @@ volScalarField alphaI
 // read from the time directory; the blend initialisation is only for a start from t = 0.
 if (runTime.value() < SMALL)
 {
+    // alphaHExact on: exact wetted fraction (still water: equals the blend
+    // weight when blendThickness = dz of the still-water row)
     alphaI.primitiveFieldRef() =
-        incident.blendAlpha(runTime.value()).primitiveField();
+        incident.targetAlpha(runTime.value())().primitiveField();
+
+    if (swenseIncident::alphaHExact(mesh.thisDb()))
+    {
+        Info<< "SWENSE alphaHExact: initial max|exact - blend| = "
+            << gMax(mag(alphaI.primitiveField()
+                 - incident.blendAlpha(runTime.value()).primitiveField()))
+            << endl;
+    }
     alphaI.correctBoundaryConditions();
 
     alpha1.primitiveFieldRef() = alphaI.primitiveField();
