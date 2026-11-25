@@ -1,0 +1,71 @@
+Moored floating box in regular waves with a linear 6x6 mooring stiffness matrix.
+
+This is tutorials/floatStepperWaveIsoFoam with the MoorDyn restraint replaced by
+the mooringStiffnessMatrix restraint
+
+    F = preload - stiffness*(xi - xi0),   xi = (x y z roll pitch yaw)
+
+where F = (Fx Fy Fz Mx My Mz) acts at the body reference point (here the centre
+of rotation, (0 0 -0.016)). The purpose is code-to-code validation: potential-flow
+and BEM tools (WAMIT, Nemoh, Capytaine, OrcaFlex linear moorings, ...) model a
+mooring as such a matrix, so the CFD result can be compared with the same mooring
+model.
+
+Allrun derives the matrix from the same MoorDyn file the MoorDyn tutorial uses
+(Mooring/lines_v2_bodyC.txt) with
+
+    moorDynStiffnessMatrix -input Mooring/lines_v2_bodyC.txt \
+        -position '(0 0 -0.016 0 0 0)' -output constant/mooringStiffness
+
+which places the body at xi0 +/- delta in each DoF, lets MoorDyn relax the lines
+and takes central differences of the static force. Add -sweep '(dof amp n)'
+(dof 0..5 = x y z rx ry rz) to write constant/sweep_<dof>.dat, MoorDyn force
+against the linear prediction over a range of offsets. A user-supplied matrix
+(for example from another code) can be written in constant/mooringStiffness by
+hand instead; an optional 'damping' 6x6 matrix adds -B*dxi/dt.
+
+To run the MoorDyn reference with the same case, swap the comments of the two
+restraint blocks in constant/dynamicMeshDict (or run ../floatStepperWaveIsoFoam).
+compareMooringModels.py plots surge, heave, pitch and the mooring force of two
+runs and prints amplitudes, means and RMS differences:
+
+    python3 compareMooringModels.py ../floatStepperWaveIsoFoam . --out mooringComparison.png
+
+Derived matrix for this case (delta = 1e-3 m / 1e-3 rad), units N/m, N/rad, N m/m, N m/rad:
+
+         x        y        z       rx       ry       rz
+  Fx  15.076    0        0        0       -0.161    0
+  Fy   0        1.835    0       -0.079    0        0
+  Fz   0        0        6.276    0        0        0
+  Mx   0       -0.083    0        0.178    0        0
+  My  -0.146    0        0        0        0.247    0
+  Mz   0        0        0        0        0        0.249
+
+  preload (0 0 -1.645 0 0 0)
+
+The static force is linear to within 1 % up to 2.5 cm surge, 4 % at 5 cm and
+15 % at 10 cm (the lines stiffen); heave (+/- 5 cm) and pitch (+/- 0.3 rad) stay
+within 0.5 %. The linear model is quasi-static: line inertia, line drag and
+slack-line snapping, which MoorDyn resolves, are not in it.
+
+Validation against MoorDyn (floatStepperWaveIsoFoam v2506, serial, same mesh and
+settings; amplitudes = half peak-to-peak over the last two wave periods):
+
+  H = 0.02 m, T = 2 s, 14 s run (motions inside the linear range)
+
+                         MoorDyn     C matrix
+    surge  amplitude     24.98 mm    25.17 mm   (+0.8 %)
+    heave  amplitude      8.20 mm     8.09 mm   (-1.4 %)
+    Fx     amplitude      0.386 N     0.382 N   (-0.9 %)
+    My     amplitude      0.0097 Nm   0.0088 Nm (MoorDyn signal has line noise)
+    pitch  amplitude      1.10 deg    1.48 deg
+
+  H = 0.12 m (this tutorial), 10 s run: identical until t ~ 3.5 s; then surge
+  reaches +/- 0.2 m, twice the range where the static force is linear, and the
+  MoorDyn lines stiffen (Fx amplitude 4.5 N against 2.8 N). Surge and heave stay
+  close (RMS difference 7 % and 6 % of the amplitude), pitch does not.
+
+Pitch is lightly damped, so the drag and inertia of the MoorDyn lines, which a
+static stiffness matrix does not have, change the pitch response even when the
+mooring moment agrees. Use a 'damping' matrix, or compare in the linear range,
+when pitch matters.

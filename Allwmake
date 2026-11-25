@@ -340,6 +340,18 @@ else
     echo "WARNING: libmoordyn.so or MoorDyn v2 headers not found, skipping moorDynR2SixDoF"
 fi
 
+# Linear 6x6 mooring stiffness restraint for FloatStepper (needs libfloaterMotion)
+echo ""
+echo "====================================="
+echo "    COMPILE MOORING STIFFNESS MATRIX"
+echo "====================================="
+if [ -f "$FOAM_USER_LIBBIN/libfloaterMotion.so" ]
+then
+    ( cd src/mooringStiffnessMatrix; wmake libso )
+else
+    echo "WARNING: libfloaterMotion.so not found, skipping mooringStiffnessMatrix"
+fi
+
 ## UTILITIES
 # Pre-processing utilities
 echo ""
@@ -449,12 +461,13 @@ echo "    CHECKING THE BUILD"
 echo "====================================="
 BUILD_FAILED=""
 for b in waveFoam waveIsoFoam floatStepper floatStepperWaveIsoFoam \
-         setWaveField setWaveParameters relaxationZoneLayout waveGaugesNProbes
+         setWaveField setWaveParameters relaxationZoneLayout waveGaugesNProbes \
+         moorDynStiffnessMatrix
 do
     [ -x "$WAVES_APPBIN/$b" ] || BUILD_FAILED="$BUILD_FAILED $b"
 done
 for l in libwaves2Foam.so libGrid2Grid.so libmoordyn_v1.so libmoordyn.so \
-         libmoorDynR1SixDoF.so libmoorDynR2SixDoF.so
+         libmoorDynR1SixDoF.so libmoorDynR2SixDoF.so libmooringStiffnessMatrix.so
 do
     [ -f "$WAVES_LIBBIN/$l" ] || BUILD_FAILED="$BUILD_FAILED $l"
 done

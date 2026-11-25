@@ -37,6 +37,7 @@ What FoamWaveTank adds to waves2Foam:
 | Current only, in a relaxation zone | `waveType DepthvaryingCurrent;` | Sec. 3.6 |
 | MoorDyn v1/v2 moorings for FloatStepper | `floaterMotionRestraint moorDynR1/moorDynR2` | Ch. 5 |
 | MoorDyn v1/v2 moorings for `sixDoFRigidBodyMotion` | `sixDoFRigidBodyMotionRestraint moorDynR1/moorDynR2` | Sec. 5.3 |
+| Linear 6x6 mooring stiffness matrix for FloatStepper, derived from a MoorDyn file, for comparison with potential-flow/BEM codes | `floaterMotionRestraint mooringStiffnessMatrix`, utility `moorDynStiffnessMatrix` | -- |
 | Installation with prerequisite and result checks | `./Allwmake` | Ch. 2 |
 
 ---
@@ -47,9 +48,10 @@ What FoamWaveTank adds to waves2Foam:
 |---|---|
 | `src/waves2Foam/` | waves2Foam library, including the HOS (`externalWaveForcing/Grid2Grid*`) and current (`current/DepthvaryingCurrent`) theories |
 | `src/moorDynSixDoF/` | MoorDyn restraints for `sixDoFRigidBodyMotion` (`libmoorDynR1SixDoF`, `libmoorDynR2SixDoF`) |
+| `src/mooringStiffnessMatrix/` | linear 6x6 mooring restraint for FloatStepper (`libmooringStiffnessMatrix`) |
 | `src/waves2Foam*/` | other waves2Foam libraries (processing, sampling, GABC) |
 | `applications/solvers/` | `waveFoam`, `waveIsoFoam`, and `floatStepperWaveIsoFoam/` (FloatStepper, git submodule, with MoorDyn) |
-| `applications/utilities/` | waves2Foam pre- and post-processing utilities (`setWaveField`, `setWaveParameters`, `relaxationZoneLayout`, `waveGaugesNProbes`, ...) |
+| `applications/utilities/` | waves2Foam pre- and post-processing utilities (`setWaveField`, `setWaveParameters`, `relaxationZoneLayout`, `waveGaugesNProbes`, `moorDynStiffnessMatrix`, ...) |
 | `ThirdParty/` | Grid2Grid (HOS wrapper, downloaded and built by `Allwmake`) and fenton4Foam |
 | `tutorials/` | example cases (below) |
 | `doc/manual/` | the manual, LaTeX source and PDF |
@@ -117,6 +119,7 @@ Copy a tutorial to a working folder and run `./Allrun` there (`./Allclean` reset
 | `tutorials/HOS_with_Current` | `waveFoam` | HOS waves with a depth-varying current | `constant/modes_HOS_SWENSE.dat` |
 | `tutorials/CurrentWithProfile` | `waveIsoFoam` | a current without waves (constant, depth-varying or parabolic profile) | -- |
 | `tutorials/floatStepperWaveIsoFoam` | `floatStepperWaveIsoFoam` | a box moored with MoorDyn v2 in regular waves (about 5 min on one core) | -- |
+| `tutorials/floatStepperWaveIsoFoam_stiffnessMatrix` | `floatStepperWaveIsoFoam` | the same box with the MoorDyn mooring replaced by its linearised 6x6 stiffness matrix, and a script comparing the two runs | -- |
 | `tutorials/postProcessingScript` | MATLAB | wave comparison, spectra, peak statistics | -- |
 
 The HOS file is produced by HOS-NWT ([repository](https://gitlab.com/lheea/HOS-NWT)) and is not part of

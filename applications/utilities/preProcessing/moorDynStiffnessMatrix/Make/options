@@ -1,0 +1,6 @@
+EXE_INC = \
+    -I../../../solvers/floatStepperWaveIsoFoam/ThirdParty/MoorDyn/submodules/MoorDyn.build/include/moordyn
+
+EXE_LIBS = \
+    -L$(FOAM_USER_LIBBIN) \
+    -lmoordyn

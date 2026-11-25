@@ -1,0 +1,35 @@
+#!/bin/sh
+cd ${0%/*} || exit 1                        # Run from this directory
+. $WM_PROJECT_DIR/bin/tools/RunFunctions    # Tutorial run functions
+
+caseName=$(basename $(dirname $(readlink -f "$0")))
+touch ${caseName}.foam
+restore0Dir
+
+# Generate base mesh
+runApplication blockMesh
+
+# Set initial free surface
+runApplication setWaveParameters
+
+# Set initial free surface
+runApplication setFields
+
+# Set initial free surface
+runApplication relaxationZoneLayout
+
+# Linearise the MoorDyn mooring about the initial body position
+# (x y z roll pitch yaw of the body reference point, as in 0.orig/uniform/floaters)
+runApplication moorDynStiffnessMatrix \
+    -input Mooring/lines_v2_bodyC.txt \
+    -position '(0 0 -0.016 0 0 0)' \
+    -delta 1e-3 -angleDelta 1e-3 \
+    -output constant/mooringStiffness
+
+# Run case
+runApplication $(getApplication)
+
+# Compare with the MoorDyn tutorial (run ../floatStepperWaveIsoFoam first):
+#python3 compareMooringModels.py ../floatStepperWaveIsoFoam . --out mooringComparison.png
+
+#------------------------------------------------------------------------------

@@ -1,0 +1,16 @@
+FLOATSTEPPER = ../../applications/solvers/floatStepperWaveIsoFoam
+
+EXE_INC = \
+    -I$(LIB_SRC)/finiteVolume/lnInclude \
+    -I$(LIB_SRC)/meshTools/lnInclude \
+    -I$(LIB_SRC)/dynamicMesh/lnInclude \
+    -I$(LIB_SRC)/dynamicFvMesh/lnInclude \
+    -I$(FLOATSTEPPER)/src/floaterMotion/lnInclude \
+    -I$(FLOATSTEPPER)/src/functionObjects/forceContributions/lnInclude \
+    -I$(FLOATSTEPPER)/src/addedMass/lnInclude
+
+LIB_LIBS = \
+    -lfiniteVolume \
+    -lmeshTools \
+    -L$(FOAM_USER_LIBBIN) \
+    -lfloaterMotion
