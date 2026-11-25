@@ -31,6 +31,7 @@ regular=regular
 $(waveTheories)/$(regular)/stokesFirst/stokesFirst.C
 $(waveTheories)/$(regular)/stokesFirstStanding/stokesFirstStanding.C
 $(waveTheories)/$(regular)/stokesSecond/stokesSecond.C
+$(waveTheories)/$(regular)/StokesIIIncident/StokesIIIncident.C
 $(waveTheories)/$(regular)/stokesSecondModulation/stokesSecondModulation.C
 $(waveTheories)/$(regular)/stokesFifth/stokesFifth.C
 
@@ -58,6 +59,7 @@ $(waveTheories)/$(extWF)/emptyExternal/emptyExternal.C
 $(waveTheories)/$(extWF)/irregularFast/irregularFast.C
 $(waveTheories)/$(extWF)/Grid2Grid/Grid2Grid.C
 $(waveTheories)/$(extWF)/Grid2GridWithCurrent/Grid2GridWithCurrent.C
+$(waveTheories)/$(extWF)/waveTheoryForcing/waveTheoryForcing.C
 
 /* WAVE BOUNDARY CONDITIONS */ 
 fvPatchFields=fvPatchFields

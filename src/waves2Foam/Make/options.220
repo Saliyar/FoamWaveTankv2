@@ -22,5 +22,6 @@ LIB_LIBS = \
     -L$(WAVES_GSL_LIB) \
     -L../../ThirdParty/Grid2Grid/lib \
     -lGrid2Grid \
+    -Wl,-rpath,$(WAVES_DIR)/ThirdParty/Grid2Grid/lib \
     -lgsl \
     -lgslcblas

@@ -9,12 +9,11 @@
 *.log
 *.o
 *.so
-**/constant/modes_HOS_SWENSE.dat
+**/constant/modes_HOS_SWENSE*.dat
 applications/solvers/waveIsoGoam/
 
 # Created by Allwmake
 /log.build
-/ThirdParty/Grid2Grid/
 
 # Core dumps
 core.[0-9]*

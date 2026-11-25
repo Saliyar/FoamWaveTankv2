@@ -10,7 +10,9 @@ function Grid2GridInstall()
     # Set the directory for Grid2Grid installation
     SRCDIR="Grid2Grid/"
     LIBRARY="$FOAM_USER_LIBBIN/libGrid2Grid.so"
-    REPO_URL="https://github.com/LHEEA/Grid2Grid.git"
+    # Fork with the fast calls used by waves2Foam Grid2Grid.C (the submodule)
+    REPO_URL="https://github.com/Saliyar/Grid2Grid.git"
+    REPO_BRANCH="swense-fast"
 
     # Check if libGrid2Grid.so exists in $FOAM_USER_LIBBIN
     if [ -f "${LIBRARY}" ]; then
@@ -19,10 +21,12 @@ function Grid2GridInstall()
         return 0
     fi
 
-    # Check for the 'Grid2Grid' folder
+    # Check for the 'Grid2Grid' folder: the pinned submodule commit first,
+    # the fork branch if this is not a git checkout
     if [ ! -d "${SRCDIR}" ] || [ -z "$(ls -A "${SRCDIR}")" ]; then
-        echo "Grid2Grid folder not found or empty. Cloning from GitHub..."
-        git clone "${REPO_URL}" "${SRCDIR}"
+        echo "Grid2Grid folder not found or empty. Fetching the submodule..."
+        ( cd .. && git submodule update --init ThirdParty/Grid2Grid ) \
+     || git clone -b "${REPO_BRANCH}" "${REPO_URL}" "${SRCDIR}"
     fi
 
     echo "Grid2Grid folder is found and populated."

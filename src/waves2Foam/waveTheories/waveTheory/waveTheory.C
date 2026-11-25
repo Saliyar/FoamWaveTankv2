@@ -72,7 +72,21 @@ waveTheory::waveTheory
 
     direction_( g_/mag(g_) ),
 
-    coeffDict_(subDict(subDictName + "Coeffs")),
+    // The coefficients come from the registered (in-memory) waveProperties
+    // when it holds them, so that a caller can add a coefficient dictionary
+    // at run time (swenseHeightRampForcing: one theory per wave height).
+    // Without such an entry the file just read gives the same dictionary
+    coeffDict_
+    (
+        (
+            mesh_.thisDb().foundObject<IOdictionary>("waveProperties")
+         && mesh_.thisDb().lookupObject<IOdictionary>("waveProperties")
+                .isDict(subDictName + "Coeffs")
+        )
+      ? mesh_.thisDb().lookupObject<IOdictionary>("waveProperties")
+            .subDict(subDictName + "Coeffs")
+      : subDict(subDictName + "Coeffs")
+    ),
 
     PI_( M_PI ),
 

@@ -221,6 +221,20 @@ public:
             return false;
         };
 
+        //- Phase speed c = omega/k [m/s] of a travelling wave; -1 if the
+        //  theory does not provide it
+        virtual scalar phaseSpeed() const
+        {
+            return -1.0;
+        };
+
+        //- Wave number k [1/m] along the propagation direction; -1 if the
+        //  theory does not provide it
+        virtual scalar waveNumber() const
+        {
+            return -1.0;
+        };
+
         // Access - field
         virtual scalarField eta
         (
