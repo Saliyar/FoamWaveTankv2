@@ -1,35 +1,114 @@
 #!/bin/sh
+#------------------------------------------------------------------------------
+# Moored box in regular waves: linear 6x6 mooring stiffness matrix vs MoorDyn
+#
+#   ./Allrun                      H = 0.02 m, 14 s  (inside the linear range)
+#   ./Allrun -height 0.12 -endTime 10   the wave of tutorials/floatStepperWaveIsoFoam
+#
+# Steps
+#   1. stiffnessMatrix/: derive C and the preload from Mooring/lines_v2_bodyC.txt
+#      with moorDynStiffnessMatrix, plus static sweeps in surge, heave and pitch
+#      -> stiffnessMatrix/constant/mooringStiffness, staticLinearity.png
+#   2. run the CFD case twice, same mesh and waves, two mooring models:
+#        stiffnessMatrix/  floaterMotionRestraint mooringStiffnessMatrix
+#        moorDyn/          floaterMotionRestraint moorDynR2 (BODY coupling)
+#      (the two solvers run at the same time, one core each)
+#   3. compare motions and mooring force -> mooringComparison.png
+#------------------------------------------------------------------------------
 cd ${0%/*} || exit 1                        # Run from this directory
 . $WM_PROJECT_DIR/bin/tools/RunFunctions    # Tutorial run functions
 
-caseName=$(basename $(dirname $(readlink -f "$0")))
-touch ${caseName}.foam
-restore0Dir
+height=0.02
+endTime=14
+while [ "$#" -gt 0 ]
+do
+    case "$1" in
+        -height)  height="$2";  shift 2 ;;
+        -endTime) endTime="$2"; shift 2 ;;
+        *) echo "Usage: ./Allrun [-height H] [-endTime T]"; exit 1 ;;
+    esac
+done
 
-# Generate base mesh
-runApplication blockMesh
+# Body reference point and initial attitude (x y z roll pitch yaw), the same
+# as centreOfRotation in case/0.orig/uniform/floaters and as the state that
+# moorDynR2 passes to MoorDyn
+position='(0 0 -0.016 0 0 0)'
 
-# Set initial free surface
-runApplication setWaveParameters
+for model in stiffnessMatrix moorDyn
+do
+    if [ -d $model ]
+    then
+        echo "$model/ exists, run ./Allclean first"
+        exit 1
+    fi
+done
 
-# Set initial free surface
-runApplication setFields
+echo "Wave height $height m, end time $endTime s"
 
-# Set initial free surface
-runApplication relaxationZoneLayout
+# ---- 1. set up the two cases ----------------------------------------------
+for model in stiffnessMatrix moorDyn
+do
+    cp -r case $model
+    cp $model/constant/mooringRestraint.$model $model/constant/mooringRestraint
+    sed -i "s/^\( *height *\)[0-9.eE+-]*;/\1$height;/" \
+        $model/constant/waveProperties.input
+    sed -i "s/^endTime .*/endTime         $endTime;/" $model/system/controlDict
+done
 
-# Linearise the MoorDyn mooring about the initial body position
-# (x y z roll pitch yaw of the body reference point, as in 0.orig/uniform/floaters)
-runApplication moorDynStiffnessMatrix \
-    -input Mooring/lines_v2_bodyC.txt \
-    -position '(0 0 -0.016 0 0 0)' \
-    -delta 1e-3 -angleDelta 1e-3 \
-    -output constant/mooringStiffness
+# ---- 2. derive the stiffness matrix from MoorDyn ---------------------------
+(
+    cd stiffnessMatrix || exit 1
 
-# Run case
-runApplication $(getApplication)
+    # C and preload at the initial position
+    runApplication moorDynStiffnessMatrix \
+        -input Mooring/lines_v2_bodyC.txt \
+        -position "$position" \
+        -delta 1e-3 -angleDelta 1e-3 \
+        -output constant/mooringStiffness
 
-# Compare with the MoorDyn tutorial (run ../floatStepperWaveIsoFoam first):
-#python3 compareMooringModels.py ../floatStepperWaveIsoFoam . --out mooringComparison.png
+    # Static sweeps: MoorDyn force against the linear prediction
+    # (dof 0..5 = x y z rx ry rz, amplitude, n points per side)
+    for sweep in '(0 0.1 20)' '(2 0.05 20)' '(4 0.3 20)'
+    do
+        dof=$(echo "$sweep" | tr -d '(' | cut -d' ' -f1)
+        runApplication -s sweep$dof moorDynStiffnessMatrix \
+            -input Mooring/lines_v2_bodyC.txt \
+            -position "$position" \
+            -delta 1e-3 -angleDelta 1e-3 \
+            -output constant/mooringStiffness \
+            -sweep "$sweep"
+    done
+)
+
+python3 scripts/plotStaticLinearity.py stiffnessMatrix/constant \
+    --out staticLinearity.png > log.plotStaticLinearity 2>&1 \
+    || echo "plotStaticLinearity.py failed, see log.plotStaticLinearity"
+
+# ---- 3. pre-process and run both cases --------------------------------------
+for model in stiffnessMatrix moorDyn
+do
+    (
+        cd $model || exit 1
+        touch $model.foam
+        restore0Dir
+        runApplication blockMesh
+        runApplication setWaveParameters
+        runApplication setFields
+        runApplication relaxationZoneLayout
+    )
+done
+
+for model in stiffnessMatrix moorDyn
+do
+    (cd $model && runApplication $(getApplication)) &
+done
+wait
+
+# ---- 4. compare --------------------------------------------------------------
+python3 scripts/compareMooringModels.py moorDyn stiffnessMatrix \
+    --labels MoorDyn "C matrix" --out mooringComparison.png \
+    > log.compareMooringModels 2>&1 \
+    || echo "compareMooringModels.py failed, see log.compareMooringModels"
+cat log.compareMooringModels
 
 #------------------------------------------------------------------------------

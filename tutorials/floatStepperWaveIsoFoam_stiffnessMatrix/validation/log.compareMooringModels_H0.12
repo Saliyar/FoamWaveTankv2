@@ -1,0 +1,9 @@
+Statistics over t = 6.00 .. 10.00 s
+quantity              amp MoorDyn   amp C matrix   mean MoorDyn  mean C matrix RMS diff/amp
+Surge [m]                 0.19883        0.18095      -0.053484      -0.048037       7.248%
+Heave [m]                0.056716        0.06205     -0.0075169     -0.0045113       5.566%
+Pitch [deg]                9.6049         11.287        -1.7037        0.52023      31.701%
+Mooring Fx [N]             4.4919         2.7509         1.2928        0.72559      19.129%
+Mooring Fz [N]              1.024         0.3896        -1.9729        -1.6171      44.768%
+Mooring My [N m]          0.16485       0.070372      -0.024804      -0.009236      23.665%
+Wrote mooringComparison.png

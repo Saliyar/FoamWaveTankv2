@@ -1,0 +1,15 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  Mooring restraint, included by constant/dynamicMeshDict
+\*---------------------------------------------------------------------------*/
+
+// Linear 6x6 mooring: F = preload - stiffness*(xi - xi0),
+// xi = (x y z roll pitch yaw) of referencePoint, F = (Fx Fy Fz Mx My Mz).
+// constant/mooringStiffness (referencePoint, stiffness, preload) is written by
+// moorDynStiffnessMatrix from Mooring/lines_v2_bodyC.txt, see Allrun.
+mooring
+{
+    floaterMotionRestraint  mooringStiffnessMatrix;
+    #include "$FOAM_CASE/constant/mooringStiffness"
+}
+
+// ************************************************************************* //

@@ -1,0 +1,17 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  Mooring restraint, included by constant/dynamicMeshDict
+\*---------------------------------------------------------------------------*/
+
+// MoorDyn v2, body coupling: the reference the stiffness matrix is derived from.
+moorDynR2_body
+{
+    floaterMotionRestraint  moorDynR2;
+    couplingMode        "BODY";
+    inputFile           "Mooring/lines_v2_bodyC.txt";
+    vtkPrefix           "mdv2_body";
+    writeMooringVTK     true;
+    vtkStartTime        0;
+    outerCorrector      1;
+}
+
+// ************************************************************************* //

@@ -54,29 +54,10 @@ solvers
 
             restraints
             {
-                // Linear 6x6 mooring: F = preload - stiffness*(xi - xi0).
-                // constant/mooringStiffness is written by
-                // moorDynStiffnessMatrix (see Allrun) from the MoorDyn file.
-                mooring
-                {
-                    floaterMotionRestraint  mooringStiffnessMatrix;
-                    #include "$FOAM_CASE/constant/mooringStiffness"
-                }
-
-                // MoorDyn reference: swap the comments to run the same case
-                // with the dynamic mooring model.
-/*
-                moorDynR2_body
-                {
-                    floaterMotionRestraint  moorDynR2;
-                    couplingMode        "BODY";
-                    inputFile           "Mooring/lines_v2_bodyC.txt";
-                    vtkPrefix           "mdv2_body";
-                    writeMooringVTK     true;
-                    vtkStartTime        0;
-                    outerCorrector      1;
-                }
-*/
+                // The mooring model is chosen by Allrun, which copies
+                // mooringRestraint.stiffnessMatrix or mooringRestraint.moorDyn
+                // to constant/mooringRestraint.
+                #include "$FOAM_CASE/constant/mooringRestraint"
             }
         }
     }

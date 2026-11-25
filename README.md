@@ -119,7 +119,7 @@ Copy a tutorial to a working folder and run `./Allrun` there (`./Allclean` reset
 | `tutorials/HOS_with_Current` | `waveFoam` | HOS waves with a depth-varying current | `constant/modes_HOS_SWENSE.dat` |
 | `tutorials/CurrentWithProfile` | `waveIsoFoam` | a current without waves (constant, depth-varying or parabolic profile) | -- |
 | `tutorials/floatStepperWaveIsoFoam` | `floatStepperWaveIsoFoam` | a box moored with MoorDyn v2 in regular waves (about 5 min on one core) | -- |
-| `tutorials/floatStepperWaveIsoFoam_stiffnessMatrix` | `floatStepperWaveIsoFoam` | the same box with the MoorDyn mooring replaced by its linearised 6x6 stiffness matrix, and a script comparing the two runs | -- |
+| `tutorials/floatStepperWaveIsoFoam_stiffnessMatrix` | `floatStepperWaveIsoFoam` | the same box with a linear 6x6 mooring stiffness matrix derived from the MoorDyn file; `Allrun` derives C, runs the C-matrix and MoorDyn cases side by side and plots the comparison (about 20 min on two cores); see its `README.md` | -- |
 | `tutorials/postProcessingScript` | MATLAB | wave comparison, spectra, peak statistics | -- |
 
 The HOS file is produced by HOS-NWT ([repository](https://gitlab.com/lheea/HOS-NWT)) and is not part of

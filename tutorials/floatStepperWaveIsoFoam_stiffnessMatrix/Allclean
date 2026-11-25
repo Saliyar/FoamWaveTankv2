@@ -1,11 +1,10 @@
 #!/bin/sh
 cd ${0%/*} || exit 1                        # Run from this directory
-. $WM_PROJECT_DIR/bin/tools/CleanFunctions  # Tutorial clean functions
 
-cleanCase0
+# Remove the two run folders made by Allrun, the plots and the logs.
+# case/ (the template) is never changed.
+rm -rf stiffnessMatrix moorDyn
+rm -f staticLinearity.png mooringComparison.png
+rm -f log.plotStaticLinearity log.compareMooringModels
 
-rm -rf Mooring/*.out
-rm -rf Mooring/*.log
-rm -rf Mooring/VTK
-rm -f constant/mooringStiffness constant/sweep_*.dat mooringComparison.png
 #------------------------------------------------------------------------------
