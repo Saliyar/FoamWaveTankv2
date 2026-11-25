@@ -91,6 +91,27 @@ namespace Grid2Grid
         double *            // w [Output z-directional fluid velocity]
     );
 
+    //- [option A] Store the stored-basis data of the HOS points (HOS frame, once)
+    extern "C" void __modgrid2grid_MOD_setupfast
+    (
+        const int *,        // hosIndex [Input : HOS Vol2Vol Index]
+        const int *,        // n [Input : number of points]
+        const double *,     // x [Input : HOS x positions]
+        const double *      // z [Input : HOS z positions]
+    );
+
+    //- [option A] eta, u, w, pd at the stored points at time t
+    extern "C" void __modgrid2grid_MOD_evaluatefast
+    (
+        const int *,        // hosIndex [Input : HOS Vol2Vol Index]
+        const double *,     // t [Input : HOS Simulation Time]
+        const int *,        // n [Input : number of points]
+        double *,           // eta [Output]
+        double *,           // u [Output]
+        double *,           // w [Output]
+        double *            // pd [Output]
+    );
+
     //- Get HOS Dynamic Pressure
     extern "C" void __modgrid2grid_MOD_gethospd
     (

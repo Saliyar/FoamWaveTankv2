@@ -1,0 +1,181 @@
+/*---------------------------------------------------------------------------*\
+  Air2AirEnhanced: analytical air field (orders 0-3) from HOS-NWT modes
+
+  Air potential (non-dimensional HOS units: length h, time sqrt(h/g)):
+
+      psi = w0 z + sum_(m,n)!=(0,0) A_mn cos(kx_m x) cos(ky_n y) exp(-k_mn z)
+
+  z is measured from the MEAN water level (z - seaLevel), as in the
+  derivation. A_mn and w0 come from modeFS (eta) and modeFSt (eta_t) by the
+  perturbation recipe of air_coefficients_third_order.pdf, Section 15.7,
+  implemented in analyticAirCoeffs.H (orders 1, 2, 3; no least squares).
+  order 0 gives zero air velocity (sensitivity test only).
+
+  Spectral cut-off (applied to eta and eta_t before the solve):
+      cutoff auto        k_cut = cutoffC / max|eta|, max over ALL records
+      cutoff kp          k_cut = cutoffKp * k_p (peak of time-averaged |eta_k|^2)
+      cutoff wavelength  k_cut = 2 pi / cutoffLength [m]
+      cutoff none        all modes
+  Coefficients are solved once per HOS record (two-slot cache), interpolated
+  linearly in time; dA/dt is the record difference over dt_HOS.
+
+  This class reads the modes file itself (ASCII, fixed 18-character fields,
+  records of 18*n1 characters, no newlines). It does not use HOSModesReader.
+
+  Queries take wave-frame x, y [m] and z - seaLevel [m]; they return
+  velocity [m/s], pressure [Pa] and potential [m^2/s].
+\*---------------------------------------------------------------------------*/
+
+#ifndef Air2AirEnhanced_H
+#define Air2AirEnhanced_H
+
+#include "dictionary.H"
+#include "scalarList.H"
+#include "labelList.H"
+#include "vector.H"
+
+#include <vector>
+#include <string>
+#include <fstream>
+
+namespace Foam
+{
+
+class Air2AirEnhanced
+{
+    struct slot
+    {
+        int index;                  // HOS record, -1 = empty
+        scalar w0;
+        std::vector<scalar> A;      // Mx*My, (m,n) -> m*My + n
+    };
+
+    // File
+    std::string file_;
+    mutable std::ifstream in_;
+    int n1_, n2_, n3add_, nt_;
+    long reclen_;
+    scalar dt_, xlen_, ylen_, h_;           // dt, xlen, ylen non-dimensional; h [m]
+
+    // Options
+    scalar g_, rhoAir_;
+    int order_;
+    bool bernoulli_, verbose_;
+    std::string cutoff_;
+
+    // Cut-off
+    scalar kcut_, etaMax_;
+    int Mx_, My_;                            // retained block
+    std::vector<char> keep_;                 // Mx*My mask (k <= kcut)
+
+    // Cache and current state (non-dimensional)
+    mutable std::vector<slot> cache_;        // records of the Grid2Grid-style window
+    mutable bool printed_;
+    scalar w0_, w0t_;
+    std::vector<scalar> A_, At_;
+    mutable std::vector<scalar> cx_, sx_, cy_, sy_;   // evaluate() scratch
+
+    // Tables of buildTables(): modes kept by the cut-off, and per distinct row
+    struct KeptMode { int m, n, q; scalar kx, ky, k; };
+    mutable std::vector<KeptMode> kept_;
+    mutable std::vector<scalar> xT_, yT_, zT_;                 // nondimensional rows
+    mutable std::vector<scalar> cxT_, sxT_, cyT_, syT_;        // [row][m] and [row][n]
+    mutable std::vector<scalar> EzT_;                          // [row][kept], < 0 if cut
+    bool updated_;
+
+    // Theory source (source theory): periodic basis, sine coefficients B and
+    // the t = 0 coefficients from the wave theory, rotated in update(t)
+    bool theory_;
+    std::vector<scalar> B_, Bt_;              // sine coefficients at update(t)
+    std::vector<scalar> A0_, B0_;             // cosine/sine coefficients at t = 0
+    std::vector<scalar> omegaNd_;             // nondimensional phase frequency c k_m
+
+    // Helpers
+    void readRecord(long rec, int n, std::vector<scalar>& v) const;
+    void readModes(int it, std::vector<scalar>& e, std::vector<scalar>& et, int Mx, int My) const;
+    void setupCutoff(const dictionary& dict);
+    const slot& coeffs(int it, int iLeft) const;
+    void evaluate(scalar xs, scalar ys, scalar zs,
+                  scalar& u, scalar& v, scalar& w, scalar& phi, scalar& phit) const;
+
+    Air2AirEnhanced(const Air2AirEnhanced&);
+    void operator=(const Air2AirEnhanced&);
+
+public:
+
+    Air2AirEnhanced(const string& modesFile, const dictionary& dict);
+    ~Air2AirEnhanced();
+
+    //- Set the coefficients for CFD time t [s]
+    void update(scalar t);
+
+    //- source theory: modes from one period of the wave theory at t = 0.
+    //  eta: N = 4 M samples over [0, Lp) [m] (eta(x_i, 0), x_i = (i+0.5) Lp/N),
+    //  c: phase speed [m/s]; h: length scale [m]; g: gravity [m/s2].
+    //  Applies the cut-off of the dictionary (auto or none) and the order.
+    void setTheory
+    (
+        scalar h,
+        scalar g,
+        scalar c,
+        scalar Lp,
+        const std::vector<scalar>& eta,
+        int M,
+        const std::string& cutoff,
+        scalar cutoffC
+    );
+
+    //- True when the modes come from a wave theory
+    bool theorySource() const { return theory_; }
+
+    //- Velocity [m/s]; z measured from the mean water level [m]
+    vector velocity(scalar x, scalar y, scalar z) const;
+
+    //- Air pressure [Pa]: -rho psi_t (linear) or -rho(psi_t + |u|^2/2) (bernoulli)
+    scalar pressure(scalar x, scalar y, scalar z) const;
+
+    //- Record coefficients A_k (all modes, k = 0 excluded from A) and w0 of
+    //  record it, for checks (B2.1-fix)
+    void recordCoefficients(int it, std::vector<scalar>& A, scalar& w0) const;
+
+    //- Number of records in the modes file
+    int nRecords() const { return nt_; }
+
+    //- Interpolated coefficients at the last update (checks, B2.1-fix)
+    const std::vector<scalar>& interpolatedA() const { return A_; }
+    scalar interpolatedW0() const { return w0_; }
+    const std::vector<scalar>& interpolatedAt() const { return At_; }
+
+    //- Velocity potential [m^2/s]
+    scalar potential(scalar x, scalar y, scalar z) const;
+
+    void flow(scalar x, scalar y, scalar z, vector& U, scalar& Pd) const;
+
+    //- Tables for a fixed point set (static mesh). x, y, z are dimensional [m]
+    //  (z from the mean water level). Distinct values get one table row each;
+    //  ix, iy, iz give each point's row. Trig and exp are tabulated per distinct
+    //  x, y, z; the time-dependent coefficients stay in A_, At_ (update(t))
+    void buildTables
+    (
+        const scalarList& x,
+        const scalarList& y,
+        const scalarList& z,
+        labelList& ix,
+        labelList& iy,
+        labelList& iz
+    ) const;
+
+    //- Same sums as flow(), with trig and exp read from the tables of
+    //  buildTables(). Rows ix, iy, iz as returned by buildTables()
+    void flowTables(label ix, label iy, label iz, vector& U, scalar& Pd) const;
+
+    int getNt() const { return nt_; }
+    scalar getDt() const { return dt_*std::sqrt(h_/g_); }   // [s]
+    int getOrder() const { return order_; }
+    scalar kCut() const { return kcut_/h_; }                 // [1/m]
+    scalar h() const { return h_; }
+};
+
+} // End namespace Foam
+
+#endif

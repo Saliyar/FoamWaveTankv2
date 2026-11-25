@@ -27,6 +27,9 @@ License
 #include "Grid2Grid.H"
 #include "addToRunTimeSelectionTable.H"
 
+#include <vector>
+
+
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 namespace Foam
@@ -363,6 +366,82 @@ vector Grid2Grid::U
 }
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// * * * * * * * * * * * * * * * Option A (stored basis) * * * * * * * * * * //
+
+void Grid2Grid::setupPoints(const pointField& pts) const
+{
+    const int n = pts.size();
+
+    std::vector<double> xs(n), zs(n);
+
+    for (label i = 0; i < n; ++i)
+    {
+        double X, Y, Z;
+        getGrid2GridPosition(pts[i], X, Y, Z);
+        xs[i] = X;
+        zs[i] = Z;
+    }
+
+    int idx = indexGrid2Grid_;
+
+    #pragma omp critical(grid2grid_setup)
+    {
+        Foam::Grid2Grid::__modgrid2grid_MOD_setupfast
+        (
+            &idx,
+            &n,
+            xs.data(),
+            zs.data()
+        );
+    }
+}
+
+
+void Grid2Grid::evaluatePoints
+(
+    const scalar time,
+    scalarField& eta,
+    vectorField& U,
+    scalarField& pExcess
+) const
+{
+    const int n = eta.size();
+
+    std::vector<double> er(n), ur(n), wr(n), pr(n);
+
+    double timeGri2Grid( getGrid2GridTIme(time) );
+    int idx = indexGrid2Grid_;
+
+    #pragma omp critical(grid2grid_eval)
+    {
+        Foam::Grid2Grid::__modgrid2grid_MOD_evaluatefast
+        (
+            &idx,
+            &timeGri2Grid,
+            &n,
+            er.data(),
+            ur.data(),
+            wr.data(),
+            pr.data()
+        );
+    }
+
+    const scalar f = factor(time);
+
+    for (int i = 0; i < n; ++i)
+    {
+        // Same post-processing as eta(), pExcess() and U()
+        eta[i] = er[i]*f + seaLevel_;
+
+        pExcess[i] = pr[i]*f + rhoWater_*Foam::mag(g_)*seaLevel_;
+
+        vector Ui(ur[i], 0.0, wr[i]);
+        Ui *= f;
+        U[i] = transMatrixToOF_ & Ui;
+    }
+}
+
 
 } // End namespace waveTheories
 } // End namespace Foam
