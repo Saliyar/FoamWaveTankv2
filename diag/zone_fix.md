@@ -934,3 +934,76 @@ On the bottom, Drho gh is 0 because that face is always wet. That leaves only pI
 - **Air velocity.** Near the surface (band A), plain waveIsoFoam also reaches 5.5-8.3 m/s, so a 5 m/s target is not met by H_P2 either. H_S3 is 0-2.3 m/s higher in 8 of 10 seconds. In the top 3 rows H_S3 reaches 2.3-5.3 m/s against 2.1-3.5 m/s.
 
 No fix.
+
+## Height ramp (rampMode height), start-up residual check, streamFunction runs, 2026-11-25
+
+fluxConsistentU is off in every run below.
+
+### Implementation
+- **Opt-in switch.** `waveProperties rampMode factor|height`. The default is `factor`, which is the behaviour before this change.
+- **Where the levels are built.** `swenseHeightRampForcing` (src/swenseWaveTank) replaces the registered `externalWaveForcing` when rampMode is height.
+  - It builds 20 theories at H_i = H i/20. For each one it copies `waveTheoryForcingCoeffs` with height H_i and calls `setWaveProperties::New(...)->set()` into an OStringStream.
+  - setWaveProperties runs on the master only, with parRun off (streamFunction runs fenton4Foam). The text is broadcast, parsed back and given Tsoft 0. A `waveTheory` is built from it.
+- **How a theory gets its coefficients.** waveTheory.C now reads its coefficients from the registered waveProperties when that dictionary has the entry.
+- **Interpolation in time.** At time t, Hr = H f(t) with the same sine law and rampTsoft. eta, U and pExcess are interpolated linearly in H between the two levels that bracket Hr. Below H_1 the lower neighbour is still water.
+- **One source for the ramp.** In height mode `swenseRamp::Tsoft()` returns 0. So the factor is 1 at every site that applied it before: swenseIncident eta/U/pExcess/Air2Air/initial cut, swenseSurface, swenseWaveVelocity and swenseWaveAlpha. They all read the forcing.
+- **Air2Air.** In height mode Air2Air must use source theory; any other source is a FatalError. One Air2Air is built per level from that level's theory eta. It is built lazily, only while the level is active, and freed after. Uw and Pd are interpolated with the same weights as the water side, with no factor.
+- **Start-up residual check** (`swenseIncidentResidual.H`, the s12 method).
+  - It covers waveTheoryForcing in both modes; in height mode it checks the full-height level.
+  - Quantities: max |R_k| and |R_m| over the second period at x = 0, divided by omega H/2.
+  - It stops with FatalError above `incidentResidualMax` (default 0.005).
+- **Libraries and build.** libswenseWaveTank_dyn links `-lwaves2FoamProcessing -lgsl -lgslcblas`. The tracked symlink `src/waves2FoamProcessing/Make/options` is re-pointed to `options.220`. Private build: `private_build_hr.sh` → `private_hr/`.
+- **Not built:** waveFoamSWENSE. Its .C has the same include change, but it was not compiled.
+
+### Start-up residual
+| theory | kinematic | mass flux | default limit 0.005 |
+|---|--:|--:|---|
+| StokesIIIncident (B05) | 0.1325 | 0.1325 | FatalError (A_stop) |
+| streamFunction N = 10, H 0.1195, T 1.993 | 3.15e-5 | 3.16e-5 | passes |
+
+### Gates
+- **a. rampMode factor, B05, 0.3 s vs fcf73c3: PASS.** 66 of 66 written files and postProcessing are byte-identical. The case needs `incidentResidualMax 1`, because StokesII now stops at the default.
+- **b. streamFunction, empty tank, 200 steps: PASS.** Every step has max|alpha1 − alphaI| = 0, max|Uc| = 0 and max|pc| = 0. alpha.water equals alphaI at 0.05/0.1/0.15/0.2 s.
+- **c. Coarse empty tank, 15 s, x = ±1, 12–15 s vs stream-function theory (`diag/s13.py`): FAIL (2nd harmonic, mean at +1).**
+
+| | x = −1 | x = +1 | target |
+|---|--:|--:|--:|
+| A1 | +0.19 %, +0.25° | +0.49 %, −0.44° | 1 %, 5° |
+| A2 | +1.9 %, +0.1° | +2.4 %, −0.5° | 1 %, 5° |
+| mean | −0.07 mm | +0.94 mm | 0.5 mm |
+
+  - eta and etaI are identical, as expected in an empty tank.
+  - The A2 excess is steady from 11 to 15 s, so it is not a ramp transient.
+  - Likely cause, not verified: both gauges are outside the relaxation zones, where alphaI is advected by isoAdvector with the analytic velocity. The coarse cell height (0.044 m) is about H/3.
+  - Per the user, the runs went ahead despite the gate.
+- **Mesh mistake in the reference run.** plain_fine_sf first ran on the medium mesh, because Allrun defaults to MESH=medium. The run was cancelled, MESH=fine was hard-set and it was rerun (15040 cells).
+
+### Runs, 23 s, 13–23 s window; reference = plain waveIsoFoam fine mesh with ESI streamFunction (`meshes/plain_fine_sf`)
+- **H_S4:** SWENSE, streamFunction, height ramp, otherwise as H_S3.
+- **H_P3:** plain waveIsoFoam on the hybrid mesh with streamFunction at the wavemaker, otherwise as H_P2.
+- **Older runs for context:** H_S3/H_P2 (StokesII) and plain fine StokesII are shown against the same reference, so the theory change is visible too.
+- **Gauge amplitudes vs stream-function theory** (A1 57.27 mm, A2 12.01 mm), A1 at x = −1: plain fine SF 58.1, H_S4 58.2, H_P3 58.0 mm.
+- **Box gauge** (mean of x = ±0.25): H_S4 reads 52.2 mm against 50.1 mm for plain fine SF (+4.2 %). The RAOs are divided by this gauge, so this enters the surge and pitch RAOs directly. Raw pitch h1 is +1.6 % (s10).
+
+RAOs (motion A1 / box-gauge A1, s6) and pitch harmonic 2 (s10): amplitude %, phase deg vs plain fine SF.
+
+| | H_S4 | H_P3 | H_S3 | H_P2 | plain fine StokesII |
+|---|--:|--:|--:|--:|--:|
+| surge RAO | **−4.0 %, +5.1°** | +0.5 %, +1.8° | +0.8 %, +7.2° | +1.4 %, +2.3° | +0.2 %, +0.1° |
+| heave RAO | −1.1 %, −0.7° | −1.3 %, −0.4° | −1.5 %, −1.4° | −1.0 %, −0.6° | −0.7 %, −0.5° |
+| pitch RAO | −2.7 %, **+15.5°** | **+6.2 %**, +2.8° | +10.0 %, +0.5° | +2.8 %, −5.4° | −1.3 %, −9.8° |
+| tension RAO | +2.0 %, +5.2° | +1.9 %, +1.1° | +12.2 %, +7.1° | +6.9 %, +2.0° | +5.4 %, +0.3° |
+| pitch h2 (ref 3.12°) | **−10.8 %, −12.9°** | **−7.8 %**, −4.3° | −12.4 %, −9.7° | +1.4 %, +10.4° | – |
+| mean surge (ref +6.64 mm) | **+6.8 %** | **+4.7 %** | +14 % | +13 % | +22 % |
+| mean tension (ref +0.194 N) | **+4.0 %** | +0.9 % | +20 % | +17 % | +20 % |
+| mean pitch (ref +0.437°) | **+30 %** | **+27 %** | +138 % | +71 % | +54 % |
+| mean heave (ref −1.18 mm) | +0.88 mm | −0.39 mm | +0.46 mm | +1.95 mm | +2.38 mm |
+| core-hours (serial) | 1.63 | 3.85 | 1.31 | 3.98 | 4.86 (SF) / 5.25 |
+
+**Readings.**
+- **Finish line not met.** The target was all within 3 % of plain fine SF with no crash.
+  - H_S4 runs 23 s without a crash and passes heave RAO, tension RAO and pitch RAO amplitude (−2.7 %).
+  - It fails surge RAO (−4.0 %), pitch RAO phase (+15.5°), pitch h2 (−10.8 %) and the mean surge, tension and pitch.
+- **H_P3 fails too.** Plain waveIsoFoam on the same hybrid mesh fails pitch RAO (+6.2 %), pitch h2 (−7.8 %) and the mean surge and pitch. So the hybrid mesh alone does not reach 3 % of the fine mesh for pitch.
+- **What streamFunction fixed.** Against its own reference, H_S4 is closer than H_S3 was: pitch RAO −2.7 % against +10 %, tension RAO +2.0 % against +12 %, mean tension +4 % against +20 %. It costs 1.63 against 1.31 core-hours (0.31 against 0.21 s/step), which is 42 % of H_P3.
+- **Theory choice matters as much as the solver.** Plain fine StokesII vs plain fine SF already differs by +5.4 % in tension RAO, +54 % in mean pitch and +22 % in mean surge.

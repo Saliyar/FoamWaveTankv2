@@ -178,7 +178,14 @@ Foam::swenseIncident::swenseIncident
             IOobject::NO_READ, IOobject::NO_WRITE),
         mesh,
         dimensionedVector("UfInc", dimVelocity, vector::zero)
-    )
+    ),
+    hr_(dynamic_cast<const swenseHeightRampForcing*>(&ext)),
+    a2aDict_(),
+    airLev_(),
+    airI0_(-1),
+    airI1_(-1),
+    airW0_(0),
+    airW1_(0)
 {
     const dictionary& wp =
         mesh.thisDb().lookupObject<IOdictionary>("waveProperties");
@@ -233,7 +240,26 @@ Foam::swenseIncident::swenseIncident
         const dictionary& a2a = wp.subDict("farfieldCoeffs").subDict("Air2Air");
         const word source = a2a.lookupOrDefault<word>("source", word("modesFile"));
 
-        if (source == "theory")
+        if (source == "theory" && hr_)
+        {
+            // rampMode height: one Air2Air per level of the height ramp,
+            // built from that level's theory when it becomes active
+            // (evaluate()), interpolated with the water-side weights
+            a2aDict_ = a2a;
+            airLev_.setSize(hr_->nLevels());
+
+            Info<< "SWENSE Air2Air source theory, rampMode height: "
+                << hr_->nLevels() << " levels, each from its own theory"
+                << " (eta of that height), interpolated in H as the water"
+                << endl;
+        }
+        else if (hr_)
+        {
+            FatalErrorInFunction
+                << "rampMode height needs Air2Air source theory (found "
+                << source << ")" << exit(FatalError);
+        }
+        else if (source == "theory")
         {
             // Periodic modes from the wave theory (one period, t = 0)
             const waveTheories::waveTheoryForcing* wtf =
@@ -400,18 +426,75 @@ void Foam::swenseIncident::buildPointTables()
 
     if (air_.valid())
     {
-        scalarList xs(n), ys(n), zs(n);
-
-        forAll(pts_, ip)
-        {
-            const vector xw = toWave(pts_[ip] - refPos_);
-            xs[ip] = xw.x();
-            ys[ip] = xw.y();
-            zs[ip] = pts_[ip].z() - seaLevel_;
-        }
-
-        air_->solver().buildTables(xs, ys, zs, airIx_, airIy_, airIz_);
+        airTables(air_());
     }
+
+    forAll(airLev_, i)
+    {
+        if (airLev_.set(i))
+        {
+            airTables(airLev_[i]);
+        }
+    }
+}
+
+
+void Foam::swenseIncident::airTables(Air2AirWrapper& a)
+{
+    const label n = pts_.size();
+    scalarList xs(n), ys(n), zs(n);
+
+    forAll(pts_, ip)
+    {
+        const vector xw = toWave(pts_[ip] - refPos_);
+        xs[ip] = xw.x();
+        ys[ip] = xw.y();
+        zs[ip] = pts_[ip].z() - seaLevel_;
+    }
+
+    // The table rows depend on the points only: airIx_, airIy_, airIz_ are
+    // the same for every wrapper
+    a.solver().buildTables(xs, ys, zs, airIx_, airIy_, airIz_);
+}
+
+
+void Foam::swenseIncident::makeAirLevel(const label i)
+{
+    // As the source theory set-up of the constructor, with the theory of
+    // level i (full values at its own height, not ramped)
+    const waveTheories::waveTheory& th = hr_->level(i);
+    const scalar c = th.phaseSpeed();
+    const scalar K = th.waveNumber();
+
+    if (c <= 0 || K <= 0)
+    {
+        FatalErrorInFunction
+            << "Air2Air source theory: the wave theory gives no"
+            << " phase speed or wave number" << exit(FatalError);
+    }
+
+    const scalar Lp = 2*M_PI/K;
+    const label M = a2aDict_.lookupOrDefault<label>("nModes", 64);
+    const label N = 4*M;
+
+    std::vector<scalar> eta(N);
+    for (label j = 0; j < N; ++j)
+    {
+        eta[j] = th.eta(point((j + 0.5)*Lp/N, 0, 0), 0.0);
+    }
+
+    Info<< "SWENSE Air2Air level " << i + 1 << " (H " << hr_->levelHeight(i)
+        << " m)" << endl;
+
+    airLev_.set(i, new Air2AirWrapper("", a2aDict_));
+    airLev_[i].setTheory
+    (
+        1.0/K, magG_, c, Lp, eta, M,
+        a2aDict_.lookupOrDefault<word>("cutoff", word("auto")),
+        a2aDict_.lookupOrDefault<scalar>("cutoffC", 0.5)
+    );
+
+    airTables(airLev_[i]);
 }
 
 
@@ -479,6 +562,36 @@ Foam::vector Foam::swenseIncident::airUP
     // -rho_a g z_w, from the Air2Air tables. Without an Air2Air block the
     // air is at rest: only the hydrostatic part
     const scalar zw = (pts_[ip] - refPos_).z();
+
+    if (airLev_.size())
+    {
+        // rampMode height: Air2Air of the two levels, weights of the water
+        // side; no factor
+        vector Uw = vector::zero;
+        scalar Pd = 0;
+
+        const label il[2] = {airI0_, airI1_};
+        const scalar wl[2] = {airW0_, airW1_};
+
+        for (label k = 0; k < 2; ++k)
+        {
+            if (il[k] >= 0)
+            {
+                vector Ul;
+                scalar Pl;
+                airLev_[il[k]].solver().flowTables
+                (
+                    airIx_[ip], airIy_[ip], airIz_[ip], Ul, Pl
+                );
+                Uw += wl[k]*Ul;
+                Pd += wl[k]*Pl;
+            }
+        }
+
+        p = Pd - rhoAir_*magG_*zw;
+
+        return toMesh(Uw);
+    }
 
     if (!air_.valid())
     {
@@ -924,6 +1037,32 @@ void Foam::swenseIncident::evaluate(const scalar t)
     if (air_.valid())
     {
         air_->update(tAir);
+    }
+
+    if (airLev_.size())
+    {
+        // The two levels of the water-side interpolation at time t; others
+        // are freed (the height ramp only moves up)
+        hr_->weights(t, airI0_, airW0_, airI1_, airW1_);
+
+        forAll(airLev_, i)
+        {
+            const bool active = (i == airI0_ || i == airI1_);
+
+            if (active && !airLev_.set(i))
+            {
+                makeAirLevel(i);
+            }
+            else if (!active && airLev_.set(i))
+            {
+                airLev_.set(i, nullptr);
+            }
+
+            if (active)
+            {
+                airLev_[i].update(tAir);
+            }
+        }
     }
 
     if (g2g_)

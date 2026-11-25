@@ -39,7 +39,7 @@ for n,p in RUNS:
             if l.startswith('Time = '):tt=float(l.split()[2])
             elif l.startswith('SWENSE band:') and tt is not None:A.append((tt,float(re.search(r'air = ([-+0-9.eE]+)',l).group(1))))
         A=np.array(A);print('max air Uc: overall %.2f m/s at %.3f s (last t %.3f); per second:'%(A[:,1].max(),A[A[:,1].argmax(),0],A[-1,0]),' '.join('%d:%.1f'%(q,A[(A[:,0]>=q)&(A[:,0]<q+1),1].max()) for q in range(int(A[0,0]),int(A[-1,0])+1) if ((A[:,0]>=q)&(A[:,0]<q+1)).any()))
-pf=g['cfd'](T0+'meshes/plain_fine')['pitch'];u=np.linspace(13,T1,5001);Pf=fit3(u,np.interp(u,*pf))
+pf=g['cfd'](T0+os.environ.get('PFREF','meshes/plain_fine'))['pitch'];u=np.linspace(13,T1,5001);Pf=fit3(u,np.interp(u,*pf))   # PFREF: reference run
 print('pitch harmonics 13-%g s, deg (vs plain fine: amplitude %%, phase deg):'%T1)
 print('  %-10s h1 %.3f  h2 %.3f  h3 %.3f'%('plain fine',*[abs(a) for a in Pf]))
 for n,p in RUNS:

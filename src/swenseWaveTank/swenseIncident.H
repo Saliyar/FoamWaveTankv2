@@ -56,6 +56,8 @@ SourceFiles
 #include "fvc.H"
 #include "Grid2Grid.H"
 #include "swenseRamp.H"
+#include "swenseHeightRampForcing.H"
+#include "PtrList.H"
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -140,7 +142,26 @@ class swenseIncident
         volScalarField pInc_;
         surfaceVectorField UfInc_;
 
+        //- [rampMode height] the height-ramped forcing (null otherwise).
+        //  Air2Air (source theory) per level of the forcing: a level is
+        //  built from its theory when it becomes active and freed when it is
+        //  no longer one of the two neighbours; air values are interpolated
+        //  with the weights of the water side (levels airI0_, airI1_, weights
+        //  airW0_, airW1_ of the last evaluate(); index < 0: weight 0)
+        const swenseHeightRampForcing* hr_;
+        dictionary a2aDict_;
+        PtrList<Air2AirWrapper> airLev_;
+        label airI0_, airI1_;
+        scalar airW0_, airW1_;
+
     // Private member functions
+
+        //- [rampMode height] build the Air2Air of level i from its theory
+        //  and its tables for the current points
+        void makeAirLevel(const label i);
+
+        //- Air2Air tables of one wrapper for the current points
+        void airTables(Air2AirWrapper& a);
 
         //- Rotation from the mesh frame to the wave frame (about z)
         vector toWave(const vector& x) const;

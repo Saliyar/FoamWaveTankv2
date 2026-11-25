@@ -18,6 +18,8 @@ EXE_INC = \
     -I$(LIB_SRC)/transportModels/geometricVoF/lnInclude \
     -I$(WAVES_SRC)/waves2Foam/lnInclude \
     -I$(WAVES_SRC)/waves2Foam/include \
+    -I$(WAVES_SRC)/waves2FoamProcessing/lnInclude \
+    -I$(WAVES_GSL_INCLUDE) \
     -I$(WAVES_SRC)/swenseWaveTank/lnInclude \
     -I$(WAVES_SRC)/swenseWaveTank/solver
 
@@ -38,5 +40,9 @@ EXE_LIBS = \
     -lgeometricVoF \
     -L$(WAVES_LIBBIN) \
     -lwaves2Foam \
+    -lwaves2FoamProcessing \
+    -L$(WAVES_GSL_LIB) \
+    -lgsl \
+    -lgslcblas \
     -lswenseWaveTank_dyn \
     -Wl,--unresolved-symbols=ignore-in-shared-libs   # FFTW comes from libGrid2Grid.so (RPATH /usr/lib64)

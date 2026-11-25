@@ -6,7 +6,18 @@
 // external wave forcing (waves2Foam), as waveFoam does
 #include "readGravitationalAcceleration.H"
 #include "readWaveProperties.H"
-#include "createExternalWaveForcing.H"
+
+// External wave forcing. rampMode factor (default): the forcing of
+// externalForcing, as createExternalWaveForcing.H. rampMode height: the
+// height-ramped analytic theory (swenseHeightRampForcing), the one place that
+// supplies the ramped incident. Then the start-up consistency check of an
+// analytic incident at the full height: kinematic and mass-flux residual over
+// one wavelength / (omega H/2), stop above incidentResidualMax (default 0.005)
+autoPtr<Foam::waveTheories::externalWaveForcing> externalWave
+(
+    swenseHeightRampForcing::newForcing(runTime, mesh)
+);
+swenseHeightRampForcing::residualCheck(externalWave(), mesh);
 
 // Total velocity, complementary velocity and complementary pressure
 Info<< "Reading field U\n" << endl;

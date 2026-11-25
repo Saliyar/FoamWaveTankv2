@@ -9,7 +9,7 @@ src=open(T0+'steps12_22Nov/build/plot_day3.py').read().split('\nX = experiment()
 g={'__file__':T0+'steps12_22Nov/build/plot_day3.py','__name__':'c'};exec(src,g)
 T=1.993;H=0.1195;h=0.5;w=2*np.pi/T;k=1.555392701892035;s=np.tanh(k*h);ph0=1.5*np.pi
 A2c=k*H*H/4*(3-s*s)/(4*s**3)
-RUNS=[('plain fine','meshes/plain_fine'),('H_P','zonefix/hybrid/H_P'),('H_S','zonefix/hybrid/H_S')]
+RUNS=[('plain fine',os.environ.get('PFREF','meshes/plain_fine')),('H_P','zonefix/hybrid/H_P'),('H_S','zonefix/hybrid/H_S')]   # PFREF: reference run
 RUNS+=[tuple(a.split('=')) for a in sys.argv[1:]]          # label=path relative to T0
 X=np.array((-1.25,-1.,-.25,.25,1.,1.25))
 tl=[round(8+.1*i,1) for i in range(151)]

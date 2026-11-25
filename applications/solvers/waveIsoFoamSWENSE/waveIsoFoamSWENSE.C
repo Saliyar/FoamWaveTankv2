@@ -31,6 +31,8 @@ Description
 #include "swenseIncidentAlphaFvPatchScalarField.H"
 #include "swenseSurface.H"
 #include "externalWaveForcing.H"
+#include "swenseHeightRampForcing.H"
+#include "swenseRamp.H"
 
 int main(int argc, char *argv[])
 {

@@ -5,6 +5,7 @@ Air2AirWrapper.C
 /* SWENSE incident fields, wetted geometry and relaxation */
 swenseSurface.C
 swenseIncident.C
+swenseHeightRampForcing.C
 swenseRelaxation.C
 swenseVoFAdvection.C
 

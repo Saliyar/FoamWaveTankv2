@@ -33,6 +33,8 @@ Description
 #include "swenseRelaxation.H"
 #include "swenseVoFAdvection.H"
 #include "externalWaveForcing.H"
+#include "swenseHeightRampForcing.H"
+#include "swenseRamp.H"
 
 int main(int argc, char *argv[])
 {
