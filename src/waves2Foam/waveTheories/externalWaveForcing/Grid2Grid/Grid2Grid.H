@@ -27,7 +27,6 @@ Class
 
 Description
 
-
 SourceFiles
     Grid2Grid.C
 
@@ -119,7 +118,21 @@ protected:
         // Compute Grid2Gridd Position
         void getGrid2GridPosition( const point& , double&, double&, double& ) const;
 
+
 public:
+
+        //- [option A] Store the spline basis of the given points, once per mesh
+        void setupPoints(const pointField& pts) const;
+
+        //- [option A] eta(x,t), U(x,t), pExcess(x,t) at the stored points, with the
+        //  same post-processing as eta(), U() and pExcess()
+        void evaluatePoints
+        (
+            const scalar time,
+            scalarField& eta,
+            vectorField& U,
+            scalarField& pExcess
+        ) const;
 
     //- Runtime type information
     TypeName("Grid2Grid");

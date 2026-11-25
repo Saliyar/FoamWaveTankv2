@@ -52,6 +52,9 @@ fi
 
 (cd waves2FoamProcessing; wmake libso)
 
+# SWENSE library (depends on waves2Foam and waves2FoamProcessing)
+(cd swenseWaveTank      ; wmake libso)
+
 # Currently, only compile waves2FoamSampling for all Openfoam versions except
 # for OpenFOAM-4.0
 if [ $FOAMEXTENDPROJECT -eq "1" ]
