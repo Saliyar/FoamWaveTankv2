@@ -51,6 +51,10 @@ maxCo           0.5;
 maxAlphaCo      0.5;
 maxDeltaT       1;
 
+// Exact incident reset after the relaxation (needs waveProperties
+// alphaHExact true; replaces levelCorrection). Default no.
+alphaIExactReset yes;
+
 libs ( "libwaves2Foam.so" "libGrid2Grid.so" "libwaves2FoamSampling.so" );
 
 functions

@@ -767,6 +767,42 @@ const bool levelCorrection =
     runTime.controlDict().lookupOrDefault<bool>("levelCorrection", false);
 Info<< "SWENSE levelCorrection " << levelCorrection << endl;
 
+// Exact incident reset (controlDict alphaIExactReset, default off;
+// swenseExactReset.H, called in swenseAlphaRelax.H after the relaxation, in
+// place of the level correction). alphaI is set to swenseIncident::exactAlpha
+// outside plainBodyZone, and alpha1 takes the same increment. The relaxation
+// target must be the same function (waveProperties alphaHExact on), otherwise
+// the zones and the reset pull alphaI toward different values every step.
+const bool alphaIExactReset =
+    runTime.controlDict().lookupOrDefault<bool>("alphaIExactReset", false);
+Info<< "SWENSE alphaIExactReset " << alphaIExactReset << endl;
+if (alphaIExactReset && !swenseIncident::alphaHExact(mesh.thisDb()))
+{
+    FatalErrorInFunction
+        << "controlDict alphaIExactReset needs waveProperties alphaHExact on:"
+        << " the reset and the relaxation target must both be"
+        << " swenseIncident::exactAlpha" << exit(FatalError);
+}
+if (alphaIExactReset && levelCorrection)
+{
+    Info<< "SWENSE alphaIExactReset on: levelCorrection is skipped" << endl;
+}
+
+// Cells left unchanged by the reset (plainBodyZone) and running totals
+boolList exactResetSkip(alphaIExactReset ? mesh.nCells() : 0, false);
+if (alphaIExactReset && plainBodyZoneID >= 0)
+{
+    for (const label c : mesh.cellZones()[plainBodyZoneID])
+    {
+        exactResetSkip[c] = true;
+    }
+    Info<< "SWENSE alphaIExactReset: cells in plainBodyZone left unchanged: "
+        << returnReduce(mesh.cellZones()[plainBodyZoneID].size(), sumOp<label>())
+        << endl;
+}
+scalar exactResetTotal = 0;
+scalar exactResetClipTotal = 0;
+
 // Write the incident residual rI at write times (waveProperties
 // logIncidentResidual, default off). Logging only.
 const bool logIncidentResidual =

@@ -3,12 +3,19 @@
 // function and their difference Drho (momentum_swense_Rev1, Section 12.2).
 // The same operations act on both fractions, so alpha1 = alphaI is kept bit
 // for bit. The column level correction (controlDict levelCorrection, default
-// off) adds the same increment to both, then clips alpha1 only.
+// off) adds the same increment to both, then clips alpha1 only. The exact
+// reset (controlDict alphaIExactReset, default off) replaces it: alphaI is set
+// to the exact cut (the relaxation target of alphaHExact) outside
+// plainBodyZone, and alpha1 takes the same increment.
 
 alpha1 = (1.0 - w)*alpha1 + w*alphaH;
 alphaI = (1.0 - w)*alphaI + w*alphaH;
 
-if (levelCorrection)
+if (alphaIExactReset)
+{
+    #include "swenseExactReset.H"
+}
+else if (levelCorrection)
 {
     #include "swenseColumnLevel.H"
 }
