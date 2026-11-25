@@ -1007,3 +1007,84 @@ RAOs (motion A1 / box-gauge A1, s6) and pitch harmonic 2 (s10): amplitude %, pha
 - **H_P3 fails too.** Plain waveIsoFoam on the same hybrid mesh fails pitch RAO (+6.2 %), pitch h2 (−7.8 %) and the mean surge and pitch. So the hybrid mesh alone does not reach 3 % of the fine mesh for pitch.
 - **What streamFunction fixed.** Against its own reference, H_S4 is closer than H_S3 was: pitch RAO −2.7 % against +10 %, tension RAO +2.0 % against +12 %, mean tension +4 % against +20 %. It costs 1.63 against 1.31 core-hours (0.31 against 0.21 s/step), which is 42 % of H_P3.
 - **Theory choice matters as much as the solver.** Plain fine StokesII vs plain fine SF already differs by +5.4 % in tension RAO, +54 % in mean pitch and +22 % in mean surge.
+
+## Which wave theories SWENSE runs with, and gate c cause, 2026-11-25
+
+Cases: zonefix/th/<case>. Coarse empty tank (as gate c), 15 s, rampTsoft 6, and `incidentResidualMax 1`, so stopped theories run anyway. Waves:
+- **mild:** H 0.04, H/L ≈ 0.01.
+- **ours:** H 0.1195, H/L 0.029.
+
+Both with T 1.993 and h 0.5. Regular theories use rampMode height. The linear irregular sea (JONSWAP, Hs = H, Tp 1.993, 40 components) uses rampMode factor and airFill water.
+
+Theory eta comes from `incidentEtaProbes`, which writes the forcing eta (ramp included) to postProcessing/incidentEta at start-up. The analysis is `diag/s14.py`, window 9–15 s; the cases are built by `diag/s14_cases.py`.
+
+### Code changes
+- **SWENSE refuses an external forcing without incident pressure** (`implementPressure()` false, which catches irregularFast). cnoidalFirst is already refused by waveTheoryForcing.
+- **Residual check fallback:** a theory without phaseSpeed gets linear c and K at `period`, or else `Tp`.
+- **Optional `incidentEtaProbes`:** writes the theory eta at given points, for comparison with the gauges.
+- **stokesFirst** now has phaseSpeed() and waveNumber() (omega/K, K). Without them it had none, so Air2Air source theory stopped it.
+- **Not touched:** rampMode factor behaviour.
+
+### Finding 1: in an empty tank nothing corrects the incident
+For every theory and wave, over all 15 000 steps, max|alpha1 − alphaI| = 0 and max|Uc| = 0, even for stokesFirst with residual 0.15. So "runs" is never in question. The only error is alphaI, advected by the incident velocity, drifting from the theory's eta. That drift is what the table measures.
+
+### Finding 2: the residual follows each theory's order
+From mild to ours the steepness ratio is ka 3.0×.
+- stokesFirst: 0.048 → 0.147, about ×3, i.e. ∝ ka.
+- stokesSecond: 0.0125 → 0.125, about ×10, i.e. ∝ (ka)².
+- stokesFifth: 4.1e-5 → 0.0101, about ×250, i.e. ∝ (ka)⁵.
+- streamFunction N=10: 9e-7 → 3e-5, truncation error.
+- linear irregular: 0.077 / 0.22, with linear c and K at Tp.
+
+### Table (etaI = eta at x = −1 / +1 vs the theory)
+
+| theory | wave | residual | default check | A1 % | A2 gauge/theory mm (%) | mean mm | verdict and reason |
+|---|---|--:|---|---|---|---|---|
+| stokesFirst | mild | 0.048 | stops | +0.4 / +0.2 | 0.57 / 0 | +0.3 / −0.2 | runs, but grows a 2nd harmonic that is not in the theory. Linear eta is advected by a velocity that is not consistent at the real surface (u η_x, w(η) − w(0) are O(ka)) |
+| stokesFirst | ours | 0.147 | stops | +1.8 / +0.5 | 4.8 / 0 | +3.0 / −2.0 | **fails**: same mechanism, 3× larger |
+| stokesSecond | mild | 0.0125 | stops | +0.6 / +0.5 | 1.55 / 1.45 (+6.8 / +6.4) | +0.2 / −0.1 | **runs correctly**: same as stokesFifth/streamFunction to 0.01 mm. The check is stricter than needed here |
+| stokesSecond | ours | 0.125 | stops | +3.4 / +2.4 | 13.5 / 12.9 (+4.4 / +3.5) | +2.1 / −1.3 | **fails**: A1 +3 % (the 3rd-order term it lacks), A2 +4 % |
+| stokesFifth | mild | 4e-5 | passes | +0.3 / +0.2 | 1.53 / 1.44 (+6.5 / +6.1) | +0.2 / −0.1 | **runs correctly** |
+| stokesFifth | ours | 0.0101 | stops | +0.7 / −0.1 | 12.1 / 11.8 (+2.5 / +2.0) | +1.8 / −1.0 | **runs correctly** (as streamFunction on this mesh). The check is stricter than needed |
+| streamFunction | mild | 9e-7 | passes | +0.2 / +0.3 | 1.53 / 1.44 (+6.2 / +6.6) | −0.1 / +0.3 | **runs correctly** |
+| streamFunction | ours | 3e-5 | passes | 0.0 / +0.7 | 12.2 / 12.0 (+1.9 / +2.7) | −0.9 / +1.9 | **runs correctly** (A2 and mean: see gate c) |
+| cnoidalFirst | both | – | – | – | – | – | **refused** at start-up by waveTheoryForcing: `implementPressure()` false (cnoidalFirst.H has no pExcess, base returns 0) |
+| irregularFast | mild | – | – | – | – | – | **refused** by the new SWENSE check: irregularFast.C:750 pExcess returns 0, implementPressure false |
+| irregular (linear, waveTheoryForcing) | mild | 0.077 | stops | rms err 3.9 / 3.4 %, corr 0.9993 | | −1.0 / +0.5 | runs, with linear pressure (irregular.C:155). Error like stokesFirst: no bound harmonics |
+| irregular (linear) | ours | 0.22 | stops | rms err 12.7 / 10.3 %, corr 0.994 | | −3.3 / −0.2 | **fails** |
+
+The +0.09 mm (+6 %) A2 excess at the mild wave is the same for every consistent theory (stokesSecond, stokesFifth, streamFunction). It is mesh discretisation (cell height 0.044 m against a2 = 1.4 mm), not the theory.
+
+**Readings.**
+- **Hypothesis confirmed:**
+  - streamFunction runs correctly at both steepnesses.
+  - cnoidalFirst and irregularFast are refused cleanly.
+  - stokesFirst, stokesSecond at our wave, and the linear irregular sea at our height degrade in proportion to their residual: a spurious or wrong 2nd harmonic, A1 off by up to 3 %, mean ±2–3 mm.
+- **Contradiction:** the 0.005 limit is stricter than the data needs. stokesSecond at the mild wave (0.0125) and stokesFifth at ours (0.0101) give etaI identical to streamFunction within the mesh error. A limit near 0.02 would separate the cases here:
+  - passes: stokesFifth at ours, stokesSecond at mild;
+  - stops: stokesFirst (0.048), irregular (0.077), stokesSecond at ours (0.125).
+
+  The default was not changed.
+- **Why the residual matters:** alphaI moves by the incident flux, so a residual R (m/s of surface motion) builds up along the path from the relaxation zone to the gauge. It is a forced term travelling with the wave. The gauge at x = +1 is 2.5 m (1.2 s) from the inlet zone.
+- **Linear irregular seas** already have their linear pressure in waves2Foam (`waveType irregular` via waveTheoryForcing). The limit is the missing bound harmonics, the same as stokesFirst. They also cannot use Air2Air source theory, which needs a periodic wave, so they run with airFill water.
+
+### Gate c cause (streamFunction at our wave, coarse; target A2 within 1 %, mean within 0.5 mm)
+
+| run | A2 x −1 / +1 | mean x −1 / +1 (mm) |
+|---|--:|--:|
+| C_sf, ramp 12 s, window 12–15 s | +1.91 / +2.38 % | −0.07 / +0.94 |
+| sf_ours, ramp 6 s, window 9–15 s | +1.90 / +2.65 % | −0.89 / +1.88 |
+| G1, no ramp, window 7–10 s | +2.07 / +1.86 % | +0.18 / −0.38 |
+| G3, no ramp, dt 0.5 ms | +2.07 / +1.87 % | +0.18 / −0.37 |
+| G2, no ramp, medium mesh | +0.84 / −0.74 % | +1.34 / −0.29 |
+
+- **A2 +2 % is spatial discretisation of the alphaI transport.**
+  - It is unchanged without a ramp, so it is not the height interpolation.
+  - It is unchanged at dt/2.
+  - On the medium mesh it falls to +0.8 / −0.7 %, within 1 %.
+  - Accepted: it is the coarse mesh.
+- **The mean is the ramp, not the theory.**
+  - The size of the error scales with the ramp rate: about 0.4 mm with no ramp (within 0.5 mm), 0.9 mm with the 12 s ramp, 1.9 mm with the 6 s ramp.
+  - In the per-period means, the step appears as the ramp ends and then stays: sf_ours x = +1 goes 0.0 → +1.3 → +2.0 mm. A long-wave transient left in the closed tank is the likely explanation.
+  - The interpolation in H cannot be the source: every level has zero mean eta and zero mean mass flux, so their weighted sum has neither.
+  - The medium-mesh +1.3 mm at x = −1 is present from the first period, so it is how that mesh and gauge represent the initial field, not dynamics.

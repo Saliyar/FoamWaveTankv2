@@ -153,6 +153,17 @@ public:
             return true;
         };
 
+        //- Phase speed c = omega/K [m/s] and wave number K [1/m]
+        virtual scalar phaseSpeed() const
+        {
+            return omega_/K_;
+        };
+
+        virtual scalar waveNumber() const
+        {
+            return K_;
+        };
+
         virtual vector U
         (
             const point&,

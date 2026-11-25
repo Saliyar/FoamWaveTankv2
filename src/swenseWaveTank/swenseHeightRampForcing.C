@@ -8,6 +8,9 @@
 #include "IStringStream.H"
 #include "OStringStream.H"
 #include "Pstream.H"
+#include "OFstream.H"
+#include "OSspecific.H"
+#include "mathematicalConstants.H"
 #include "swenseIncidentResidual.H"
 
 #include <cmath>
@@ -274,7 +277,28 @@ Foam::swenseHeightRampForcing::newForcing(Time& rT, const fvMesh& mesh)
 
     Info << "\nReading waveProperties" << endl;
 
-    return waveTheories::externalWaveForcing::New(extIO, rT, mesh);
+    autoPtr<waveTheories::externalWaveForcing> ext
+    (
+        waveTheories::externalWaveForcing::New(extIO, rT, mesh)
+    );
+
+    // SWENSE takes the incident pressure from the forcing (p = pInc + pc +
+    // Drho gh): a forcing whose pExcess is a placeholder 0 would run with
+    // the hydrostatic incident pressure only. waveTheoryForcing refuses such
+    // theories itself (cnoidalFirst); this catches external forcings
+    // (irregularFast)
+    if (!ext->implementPressure())
+    {
+        FatalErrorInFunction
+            << "externalForcing " << ext->type() << " does not implement the"
+            << " incident pressure (implementPressure false, pExcess = 0)."
+            << nl << "    SWENSE needs pExcess for pInc. For a linear"
+            << " irregular sea use externalForcing waveTheoryForcing with"
+            << " waveType irregular (linear pressure)"
+            << exit(FatalError);
+    }
+
+    return ext;
 }
 
 
@@ -290,32 +314,111 @@ void Foam::swenseHeightRampForcing::residualCheck
 
     const scalar zb = gMin(mesh.points().component(vector::Z)());
 
+    const IOdictionary& wp =
+        mesh.thisDb().lookupObject<IOdictionary>("waveProperties");
+
     const swenseHeightRampForcing* hr =
         dynamic_cast<const swenseHeightRampForcing*>(&ext);
     const waveTheories::waveTheoryForcing* wtf =
         dynamic_cast<const waveTheories::waveTheoryForcing*>(&ext);
 
+    // c and K of the checked wave: the theory's own (phaseSpeed(),
+    // waveNumber()), else (stokesFirst, irregular) linear dispersion with the
+    // period of the coefficients (period, else the peak period Tp) and depth
+    auto cK = [&](const scalar c0, const scalar K0, scalar& c, scalar& K)
+    {
+        if (c0 > 0 && K0 > 0)
+        {
+            c = c0;
+            K = K0;
+            return word("own c, K");
+        }
+
+        const dictionary& cd = wp.subDict("waveTheoryForcingCoeffs");
+        const scalar T =
+            cd.found("period") ? cd.get<scalar>("period") : cd.get<scalar>("Tp");
+        const scalar d = cd.get<scalar>("depth");
+        const scalar gm = mag(meshObjects::gravity::New(mesh.time()).value());
+        const scalar om = constant::mathematical::twoPi/T;
+
+        K = om*om/gm;
+        for (label it = 0; it < 200; ++it)
+        {
+            K = om*om/(gm*Foam::tanh(K*d));
+        }
+        c = om/K;
+
+        return word("linear c, K at T " + Foam::name(T));
+    };
+
+    scalar c = 0, K = 0;
+
     if (hr)
     {
         const waveTheories::waveTheory& th = hr->level(hr->nLevels() - 1);
+        const word how(cK(th.phaseSpeed(), th.waveNumber(), c, K));
         swenseIncidentResidual::check
         (
-            th, th.phaseSpeed(), th.waveNumber(), zb, resMax,
-            "height ramp, level H " + Foam::name(hr->fullHeight())
+            th, c, K, zb, resMax,
+            "height ramp, " + word(th.type()) + ", level H "
+          + Foam::name(hr->fullHeight()) + ", " + how
         );
     }
-    else if (wtf && wtf->phaseSpeed() > 0 && wtf->waveNumber() > 0)
+    else if (wtf)
     {
+        const word how(cK(wtf->phaseSpeed(), wtf->waveNumber(), c, K));
         swenseIncidentResidual::check
         (
-            *wtf, wtf->phaseSpeed(), wtf->waveNumber(), zb, resMax,
-            "waveTheoryForcing"
+            *wtf, c, K, zb, resMax,
+            "waveTheoryForcing, "
+          + word(wp.subDict("waveTheoryForcingCoeffs").lookup("waveType"))
+          + ", " + how
         );
     }
     else
     {
         Info<< "SWENSE incident residual: not checked (forcing "
             << ext.type() << ")" << endl;
+    }
+
+    // Optional: the incident elevation as SWENSE uses it (ramp included) at
+    // given points, written once at start-up for startTime..endTime, for
+    // comparison with the gauges (diag/s14.py). incidentEtaProbes (points);
+    // incidentEtaProbesDt (default 0.01 s)
+    if (wp.found("incidentEtaProbes") && Pstream::master())
+    {
+        const List<point> pr(wp.lookup("incidentEtaProbes"));
+        const scalar dtS = wp.lookupOrDefault<scalar>("incidentEtaProbesDt", 0.01);
+        const scalar Ts = swenseRamp::Tsoft(mesh.thisDb());
+        const Time& rt = mesh.time();
+
+        const fileName dir(rt.globalPath()/"postProcessing"/"incidentEta");
+        mkDir(dir);
+        OFstream os(dir/"eta.dat");
+        os.precision(10);
+
+        os << "# incident eta (ramp included), points";
+        for (const point& q : pr)
+        {
+            os << " " << q;
+        }
+        os << nl;
+
+        const label nt = label((rt.endTime().value() - rt.startTime().value())/dtS + 0.5);
+
+        for (label i = 0; i <= nt; ++i)
+        {
+            const scalar t = rt.startTime().value() + i*dtS;
+            os << t;
+            for (const point& q : pr)
+            {
+                os << " " << ext.eta(q, t)*swenseRamp::factor(Ts, t);
+            }
+            os << nl;
+        }
+
+        Info<< "SWENSE incident eta at " << pr.size() << " points written to "
+            << dir/"eta.dat" << endl;
     }
 }
 

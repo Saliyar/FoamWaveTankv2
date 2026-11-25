@@ -4,7 +4,7 @@
 # ./private_hr/{lib,bin}; nothing installed is touched.
 set -e
 WT=/gpfs/hpc-home/projects/dtu_00075/apps/FoamWaveTank/fwt_zone_fix
-OUT=$WT/private_hr
+OUT=${OUT:-$WT/private_hr}
 export PAGER=cat MODULES_PAGER=cat
 module use /services/tools/modulefiles
 module load tools gcc/14.2.0 gsl/2.7 fftw/3.3.10 ucx/1.20.0 openmpi/5.0.2 cuda/toolkit/11.0.3 openfoam.com/2506
