@@ -41,7 +41,14 @@ boundaryField
 
     atmosphere
     {
-        type            fixedValue;
+        // Atmosphere brake (see Readme.md): reads only Uc and phiComp
+        type            totalPressure;
+        p0              uniform 0;
+        U               Uc;
+        phi             phiComp;
+        rho             rho;
+        psi             none;
+        gamma           1;
         value           uniform 0;
     }
 

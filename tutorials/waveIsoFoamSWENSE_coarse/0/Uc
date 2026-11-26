@@ -24,7 +24,10 @@ boundaryField
 {
     atmosphere
     {
-        type            zeroGradient;
+        // Atmosphere brake (see Readme.md): reads only phiComp
+        type            pressureInletOutletVelocity;
+        phi             phiComp;
+        value           uniform (0 0 0);
     }
     bottom
     {

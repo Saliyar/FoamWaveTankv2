@@ -37,6 +37,8 @@ The case files hold the validated pure-wave settings; the code defaults are diff
   same exact wetted fraction outside `plainBodyZone`, and alpha1 takes the same increment.
   It needs `alphaHExact true` (the solver stops otherwise) and replaces `levelCorrection`.
 - `system/fvSolution`: isoAdvector tolerances 1e-8, `PIMPLE nOuterCorrectors 1`, `psiProj` solver.
+- `0/pc`, `0/Uc` atmosphere brake (`totalPressure` / `pressureInletOutletVelocity` on Uc and phiComp only):
+  pure waves are unchanged (Uc = 0 gives pc = 0); with a moving body it stops air drawn in through the top (fine moored box).
 
 ## Running
 
