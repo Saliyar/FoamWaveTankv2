@@ -25,6 +25,8 @@ Description
 #include "constrainHbyA.H"
 #include "constrainPressure.H"
 #include "fixedGradientFvPatchFields.H"
+#include "totalPressureFvPatchScalarField.H"
+#include "pressureInletOutletVelocityFvPatchVectorField.H"
 #include "swenseIncident.H"
 #include "swenseRelaxation.H"
 #include "swenseVoFAdvection.H"

@@ -48,6 +48,10 @@ volScalarField pc
 // fields pc and Uc must not read the total U or the total flux phi. Such
 // boundary conditions give a non-zero complementary value when the flow is
 // exactly incident. Allowed: fixedValue, zeroGradient, fixedFluxPressure, etc.
+// Atmosphere brake: pc totalPressure with U Uc and phi phiComp, and Uc
+// pressureInletOutletVelocity with phi phiComp, read only complementary fields
+// (zero when the flow is exactly incident, so pc_b = p0 and pure waves are
+// unchanged); they are allowed. With the total U or phi they stay forbidden.
 {
     const wordList forbidden
     (
@@ -64,26 +68,57 @@ volScalarField pc
 
     forAll(pc.boundaryField(), patchi)
     {
-        if (forbidden.found(pc.boundaryField()[patchi].type()))
+        const fvPatchScalarField& pf = pc.boundaryField()[patchi];
+        if (isA<totalPressureFvPatchScalarField>(pf))
+        {
+            const totalPressureFvPatchScalarField& tp =
+                refCast<const totalPressureFvPatchScalarField>(pf);
+            if (tp.UName() == "Uc" && tp.phiName() == "phiComp")
+            {
+                Info<< "SWENSE: pc on patch " << pf.patch().name()
+                    << " totalPressure with U " << tp.UName() << " phi "
+                    << tp.phiName() << " allowed (atmosphere brake)" << endl;
+                continue;
+            }
+        }
+        if (forbidden.found(pf.type()))
         {
             FatalErrorInFunction
-                << "pc on patch " << pc.boundaryField()[patchi].patch().name()
-                << " uses " << pc.boundaryField()[patchi].type()
-                << ", which reads the total U or phi. Use fixedValue or"
-                << " zeroGradient for the complementary pressure."
+                << "pc on patch " << pf.patch().name()
+                << " uses " << pf.type()
+                << ", which reads the total U or phi: pc would then be"
+                << " non-zero when the flow is exactly incident. Use"
+                << " fixedValue or zeroGradient, or totalPressure with"
+                << " U Uc and phi phiComp (complementary fields only)."
                 << exit(FatalError);
         }
     }
 
     forAll(Uc.boundaryField(), patchi)
     {
-        if (forbidden.found(Uc.boundaryField()[patchi].type()))
+        const fvPatchVectorField& pf = Uc.boundaryField()[patchi];
+        if (isA<pressureInletOutletVelocityFvPatchVectorField>(pf))
+        {
+            const pressureInletOutletVelocityFvPatchVectorField& pv =
+                refCast<const pressureInletOutletVelocityFvPatchVectorField>(pf);
+            if (pv.phiName() == "phiComp")
+            {
+                Info<< "SWENSE: Uc on patch " << pf.patch().name()
+                    << " pressureInletOutletVelocity with phi "
+                    << pv.phiName() << " allowed (atmosphere brake)" << endl;
+                continue;
+            }
+        }
+        if (forbidden.found(pf.type()))
         {
             FatalErrorInFunction
-                << "Uc on patch " << Uc.boundaryField()[patchi].patch().name()
-                << " uses " << Uc.boundaryField()[patchi].type()
-                << ", which reads the total U or phi. Use fixedValue or"
-                << " zeroGradient for the complementary velocity."
+                << "Uc on patch " << pf.patch().name()
+                << " uses " << pf.type()
+                << ", which reads the total U or phi: Uc would then be"
+                << " non-zero when the flow is exactly incident. Use"
+                << " fixedValue or zeroGradient, or"
+                << " pressureInletOutletVelocity with phi phiComp"
+                << " (complementary flux only)."
                 << exit(FatalError);
         }
     }
