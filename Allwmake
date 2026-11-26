@@ -263,15 +263,34 @@ if [ -f ".gitmodules" ]; then
     echo "Syncing submodule configuration..."
     git submodule sync --recursive
     echo "Updating git submodules to latest remote..."
-    if ! git submodule update --init --remote
-    then
-        echo ""
-        echo "FATAL ERROR: the git submodules (Grid2Grid, FloatStepper) could not be fetched."
-        echo "    Read the git message above: no internet access, or the disk is full."
-        echo "    Fix it, then run ./Allwmake again."
-        echo ""
-        exit 1
-    fi
+    git submodule update --init --remote \
+ || echo "WARNING: 'git submodule update' failed (see the git message above); checking the submodules..."
+fi
+
+## The submodules must be checked out completely. A run that stopped half-way
+## (disk full, network) can leave an empty folder: retry with --force once.
+submoduleOk()
+{
+    [ -f ThirdParty/Grid2Grid/CMakeLists.txt ] \
+ && [ -f applications/solvers/floatStepperWaveIsoFoam/Allwmake ]
+}
+if [ -f ".gitmodules" ] && ! submoduleOk
+then
+    echo "A submodule folder is empty or incomplete: checking it out again..."
+    git submodule update --init --force ThirdParty/Grid2Grid applications/solvers/floatStepperWaveIsoFoam
+fi
+if ! submoduleOk
+then
+    echo ""
+    echo "FATAL ERROR: the submodules are incomplete:"
+    [ -f ThirdParty/Grid2Grid/CMakeLists.txt ] || echo "    ThirdParty/Grid2Grid"
+    [ -f applications/solvers/floatStepperWaveIsoFoam/Allwmake ] || echo "    applications/solvers/floatStepperWaveIsoFoam"
+    echo "    Read the git messages above (no internet access? disk or quota full?)."
+    echo "    Make sure there is free disk space, then start from a fresh clone:"
+    echo "        cd .. && rm -rf $(basename "$PWD")"
+    echo "        git clone https://github.com/Saliyar/FoamWaveTankv2.git && cd FoamWaveTankv2 && ./Allwmake"
+    echo ""
+    exit 1
 fi
 
 ## COMPILE THIRD PARTY DEPENDENCIES
@@ -438,7 +457,21 @@ else
     ln -s -f optionsNonGABC $WAVES_PRE/setWaveField/Make/options
 fi
 
-( cd $WAVES_PRE && wmake all )
+# One utility at a time, so that one failure does not stop the others
+# (setWaveField, setWaveParameters, ... are needed by every case).
+# moorDynStiffnessMatrix needs the MoorDyn v2 headers from the FloatStepper build.
+for u in $WAVES_PRE/*/
+do
+    u=${u%/}
+    [ -d "$u/Make" ] || continue
+    if [ "$(basename $u)" = moorDynStiffnessMatrix ] \
+    && [ ! -d "applications/solvers/floatStepperWaveIsoFoam/ThirdParty/MoorDyn/submodules/MoorDyn.build/include/moordyn" ]
+    then
+        echo "WARNING: MoorDyn v2 headers not found, skipping moorDynStiffnessMatrix"
+        continue
+    fi
+    ( cd $u && wmake ) || echo "WARNING: $(basename $u) failed"
+done
 
 # Post-processing utilities - Post processing removed from compilation Jan. 2021
 # echo ""
