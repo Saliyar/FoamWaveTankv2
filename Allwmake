@@ -199,6 +199,29 @@ echo "All prerequisites found."
 echo "====================================="
 echo ""
 
+## DISK SPACE: the clone with submodules and the build take about 400 MB.
+## Write a real test file, because a full user quota does not show in df.
+spaceCheck()
+{
+    dir=$1; need_mb=$2; f="$dir/.fwt_space_test.$$"
+    mkdir -p "$dir" 2>/dev/null
+    if dd if=/dev/zero of="$f" bs=1M count="$need_mb" status=none 2>/dev/null; then
+        rm -f "$f"; return 0
+    fi
+    rm -f "$f"
+    echo ""
+    echo "FATAL ERROR: less than $need_mb MB free for you in $dir"
+    echo "    (the disk or your disk quota is full: 'No space left on device')."
+    echo "    FoamWaveTank needs about 400 MB to build, plus room for the cases."
+    echo "    See what uses the space:   du -sh ~/* ~/.[!.]* 2>/dev/null | sort -h | tail"
+    echo "    Free space, or clone FoamWaveTankv2 to a disk with more space, then run ./Allwmake again."
+    echo ""
+    echo "EXITING: nothing was compiled."
+    exit 1
+}
+spaceCheck "$PWD" 600
+[ -n "$FOAM_USER_LIBBIN" ] && spaceCheck "$FOAM_USER_LIBBIN" 100
+
 ## Check if WAVES_DIR exists
 if [ ! -d "$WAVES_DIR" ]
 then
@@ -240,7 +263,15 @@ if [ -f ".gitmodules" ]; then
     echo "Syncing submodule configuration..."
     git submodule sync --recursive
     echo "Updating git submodules to latest remote..."
-    git submodule update --init --remote
+    if ! git submodule update --init --remote
+    then
+        echo ""
+        echo "FATAL ERROR: the git submodules (Grid2Grid, FloatStepper) could not be fetched."
+        echo "    Read the git message above: no internet access, or the disk is full."
+        echo "    Fix it, then run ./Allwmake again."
+        echo ""
+        exit 1
+    fi
 fi
 
 ## COMPILE THIRD PARTY DEPENDENCIES

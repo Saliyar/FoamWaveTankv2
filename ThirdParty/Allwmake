@@ -29,6 +29,12 @@ function Grid2GridInstall()
      || git clone -b "${REPO_BRANCH}" "${REPO_URL}" "${SRCDIR}"
     fi
 
+    if [ ! -f "${SRCDIR}/CMakeLists.txt" ]; then
+        echo "ERROR: ${SRCDIR} is incomplete (no CMakeLists.txt): the checkout failed."
+        echo "    Check the git message above (disk full? no internet?), then run"
+        echo "    'git submodule update --init --force ThirdParty/Grid2Grid' and ./Allwmake again."
+        return 1
+    fi
     echo "Grid2Grid folder is found and populated."
 
     # Check if the required GCC version is available
