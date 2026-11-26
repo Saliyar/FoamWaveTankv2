@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <limits>
 #include <map>
+#include <unordered_map>
 #include <utility>
 
 namespace
@@ -779,7 +780,10 @@ namespace
         std::vector<scalar>& rows
     )
     {
-        std::map<long long, label> seen;
+        // Hash map: the same rows in the same order (first appearance) as an
+        // ordered map, without the O(n log n) tree
+        std::unordered_map<long long, label> seen;
+        seen.reserve(2*v.size());
         idx.setSize(v.size());
         rows.clear();
 

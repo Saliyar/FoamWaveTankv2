@@ -10,6 +10,7 @@
 
 #include <cmath>
 #include <map>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -389,8 +390,19 @@ void Foam::swenseIncident::buildPointTables()
         pts_[ip] = pts[ip];
     }
 
-    // Grid2Grid eta depends on (x, y) only: one row per distinct (x, y)
-    std::map<std::pair<long long, long long>, label> rowOf;
+    // Grid2Grid eta depends on (x, y) only: one row per distinct (x, y).
+    // Hash map: the same rows in the same order (first appearance) as an
+    // ordered map, without the O(n log n) tree
+    struct keyHash
+    {
+        size_t operator()(const std::pair<long long, long long>& k) const
+        {
+            return std::hash<long long>()(k.first)*1000003u
+                ^ std::hash<long long>()(k.second);
+        }
+    };
+    std::unordered_map<std::pair<long long, long long>, label, keyHash> rowOf;
+    rowOf.reserve(2*n);
     std::vector<point> etaRows;
 
     etaIdx_.setSize(n);
@@ -1002,11 +1014,54 @@ Foam::volScalarField Foam::swenseIncident::blendAlpha(const scalar t) const
 }
 
 
+bool Foam::swenseIncident::centresMoved() const
+{
+    // Same order as buildPointTables: cells, boundary cell values, faces,
+    // boundary faces
+    const volVectorField& C = mesh_.C();
+    const surfaceVectorField& Cf = mesh_.Cf();
+
+    label ip = 0;
+    const label n = pts_.size();
+
+    forAll(C, celli)
+    {
+        if (ip >= n || C[celli] != pts_[ip++]) return true;
+    }
+    forAll(C.boundaryField(), patchi)
+    {
+        forAll(C.boundaryField()[patchi], facei)
+        {
+            if (ip >= n || C.boundaryField()[patchi][facei] != pts_[ip++]) return true;
+        }
+    }
+    forAll(Cf, facei)
+    {
+        if (ip >= n || Cf[facei] != pts_[ip++]) return true;
+    }
+    forAll(Cf.boundaryField(), patchi)
+    {
+        forAll(Cf.boundaryField()[patchi], facei)
+        {
+            if (ip >= n || Cf.boundaryField()[patchi][facei] != pts_[ip++]) return true;
+        }
+    }
+
+    return ip != n;
+}
+
+
 void Foam::swenseIncident::movePoints()
 {
     // The point lists follow the current cell and face centres. The
     // Grid2Grid basis is stored for these points, so it is set up again only
-    // when a point has moved (a zero motion keeps the stored basis, as static)
+    // when a point has moved (a zero motion keeps the stored basis, as static).
+    // No centre moved: the tables are already those of the current points.
+    if (!centresMoved())
+    {
+        return;
+    }
+
     const pointField oldPts(pts_);
 
     buildPointTables();

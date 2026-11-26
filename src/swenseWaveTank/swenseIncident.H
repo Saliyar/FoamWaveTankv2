@@ -232,6 +232,9 @@ class swenseIncident
         //  eta and distinct x, y, z for the Air2Air tables
         void buildPointTables();
 
+        //- True if a cell or face centre differs from the stored point list
+        bool centresMoved() const;
+
         //- Disallow default bitwise copy
         swenseIncident(const swenseIncident&);
         void operator=(const swenseIncident&);
