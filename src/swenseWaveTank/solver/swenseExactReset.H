@@ -6,10 +6,12 @@
 //        relaxation target with waveProperties alphaHExact on)
 //   dA = aX - alphaI;  alphaI = aX;  alpha1 = alpha1 + dA
 // alpha1 + dA is written as aX + (alpha1 - alphaI), so alpha1 = aX exactly
-// where alpha1 = alphaI. alpha1 is clipped to [0, 1]; the clipped volume is
-// logged. Log per step: net and abs reset volume (sum dA V, sum |dA| V),
-// max|dA| with its position, split into free zone (w = 0) and relaxation
-// zones (w > 0), and running totals.
+// where alpha1 = alphaI. alpha1 is clipped to [0, 1]; the volume removed by
+// the clip is logged as "incident correction not taken by alpha1": the part
+// of the alphaI correction that alpha1 cannot follow where it carries the
+// scattered wave (alpha1 != alphaI). Log per step: net and abs reset volume
+// (sum dA V, sum |dA| V), max|dA| with its position, split into free zone
+// (w = 0) and relaxation zones (w > 0), and running totals.
 {
     const volScalarField alphaX(incident.exactAlpha(runTime.value()));
     const scalarField& aX = alphaX.primitiveField();
@@ -83,9 +85,9 @@
     Info<< "SWENSE alphaIExactReset: net = " << netV
         << " m3, abs = " << absV
         << " m3, max|dA| = " << dMax << " at x = " << xM << " z = " << zM
-        << ", clipped alpha1 = " << clipV
+        << ", incident correction not taken by alpha1 = " << clipV
         << " m3; totals abs " << exactResetTotal
-        << " clipped " << exactResetClipTotal << " m3" << nl
+        << " not taken " << exactResetClipTotal << " m3" << nl
         << "SWENSE alphaIExactReset zones: free (w = 0) net = " << freeNet
         << " abs = " << freeAbs << " m3, relax (w > 0) net = " << relaxNet
         << " abs = " << relaxAbs << " m3" << endl;
