@@ -43,6 +43,12 @@ References
 #include "quaternion.H"
 #include "foamVtkSeriesWriter.H"
 
+#include <algorithm>
+#include <cmath>
+#include <cstdlib>
+#include <fstream>
+#include <string>
+
 // * * * * * * * * * * * * * * Static Data Members * * * * * * * * * * * * * //
 
 namespace Foam
@@ -85,8 +91,36 @@ Foam::sixDoFRigidBodyMotionRestraints::moorDynR2::moorDynR2
     moordyn_backup_.t = 0.0;
     moordyn_backup_.data = nullptr;
 
-    // Create the MoorDyn system
-    if (Pstream::master())
+    nCouplingDof_ = 0;
+    restartTime_ = -1;
+    moordyn_ = nullptr;
+    moordyn_body_ = nullptr;
+
+    // The MoorDyn system is created at the first restrain() call, when the
+    // start time is known: on a restart its output files are kept first
+    if (Pstream::master() && writeVTK_)
+    {
+#ifndef MOORDYN2_HAVE_VTK
+        if (!legacyVTK_) {
+            FatalErrorInFunction
+                << "vtkLegacyFormat=false option has been set. "
+                << "However, MoorDyn v2 has been compiled without VTK "
+                << "support. Please set vtkLegacyFormat=true or install "
+                << "VTK and recompile foamMooring"
+                << exit(FatalError);
+        }
+#endif
+    }
+
+    if (writeVTK_)
+    {
+        mkDir("Mooring/VTK");
+    }
+}
+
+
+void Foam::sixDoFRigidBodyMotionRestraints::moorDynR2::createMoorDyn() const
+{
     {
         int moordyn_err = MOORDYN_SUCCESS;
         //moordyn_ = MoorDyn_Create("Mooring/lines_v2.txt");
@@ -163,29 +197,213 @@ Foam::sixDoFRigidBodyMotionRestraints::moorDynR2::moorDynR2
             FatalErrorInFunction
                 << "Two coupling modes supported: 'POINT' or 'BODY' "
                 << exit(FatalError);
-        }   
-
-        if (writeVTK_)
-        {
-#ifndef MOORDYN2_HAVE_VTK
-            if (!legacyVTK_) {
-                FatalErrorInFunction
-                    << "vtkLegacyFormat=false option has been set. "
-                    << "However, MoorDyn v2 has been compiled without VTK "
-                    << "support. Please set vtkLegacyFormat=true or install "
-                    << "VTK and recompile foamMooring"
-                    << exit(FatalError);
-            }
-#endif
         }
-
     }
+}
 
-    if (writeVTK_)
+
+namespace
+{
+    // First token of a MoorDyn output row as a time; false for header lines.
+    // dec: number of printed decimals (0 for whole numbers and exponents)
+    bool rowTime(const std::string& line, double& t, int& dec)
     {
-        mkDir("Mooring/VTK");
+        const auto b = line.find_first_not_of(" \t");
+        if (b == std::string::npos) return false;
+        const auto e = line.find_first_of(" \t\r", b);
+        const std::string tok(line.substr(b, e == std::string::npos ? e : e - b));
+        char* end = nullptr;
+        t = std::strtod(tok.c_str(), &end);
+        if (end == tok.c_str() || *end != '\0') return false;
+        const auto dot = tok.find('.');
+        dec =
+            (dot == std::string::npos || tok.find_first_of("eE") != std::string::npos)
+          ? 0
+          : int(tok.size() - dot - 1);
+        return true;
     }
 
+    // Time tolerance of an output file: half a unit of the finest printed
+    // decimal of its time column. Per file, not per row: general format
+    // (Body files) drops trailing zeros, so "1.8" is 1.8000, not 1.8 +- 0.05
+    double timeTol(const Foam::DynamicList<std::string>& lines)
+    {
+        int dmax = 0;
+        for (const std::string& l : lines)
+        {
+            double t; int d;
+            if (rowTime(l, t, d)) dmax = std::max(dmax, d);
+        }
+        return dmax > 0 ? 0.5*std::pow(10.0, -dmax) : 1e-9;
+    }
+
+    // Lines of a text file (empty lines dropped)
+    Foam::DynamicList<std::string> readLines(const Foam::fileName& f)
+    {
+        Foam::DynamicList<std::string> lines;
+        Foam::IFstream is(f);
+        std::string line;
+        while (is.good())
+        {
+            is.getLine(line);
+            if (line.find_first_not_of(" \t\r") != std::string::npos)
+            {
+                lines.append(line);
+            }
+        }
+        return lines;
+    }
+
+    void writeLines
+    (
+        const Foam::fileName& f,
+        const Foam::DynamicList<std::string>& lines
+    )
+    {
+        const Foam::fileName tmp(f + ".tmp");
+        {
+            std::ofstream os(tmp);
+            for (const std::string& l : lines) os << l << '\n';
+        }
+        Foam::mv(tmp, f);
+    }
+}
+
+
+void Foam::sixDoFRigidBodyMotionRestraints::moorDynR2::keepOutputs
+(
+    const scalar t0
+) const
+{
+    const fileName dir(inputFile_.path());
+    const word base(inputFile_.nameLessExt());
+
+    for (const fileName& f : readDir(dir, fileName::FILE, false))
+    {
+        if
+        (
+            f.ext() != "out"
+         || (f.lessExt() != base && f.substr(0, base.size() + 1) != base + "_")
+        )
+        {
+            continue;
+        }
+        const fileName F(dir/f), Fp(F + ".prev");
+
+        // Rows up to t0: first those of an unmerged .prev (a restarted run
+        // that stopped early), then those of the file itself after the end
+        // of the .prev rows (rows of one file are not compared with each
+        // other: the printed time may repeat when dt is below its resolution)
+        DynamicList<std::string> out;
+        double tFrom = -GREAT;
+        label nRows = 0;
+        for (const fileName& src : {Fp, F})
+        {
+            if (!isFile(src)) continue;
+            const DynamicList<std::string> lines(readLines(src));
+            const double tol = timeTol(lines);
+            const bool takeHead = out.empty();
+            bool inHead = true;
+            double tEnd = tFrom;
+            for (const std::string& l : lines)
+            {
+                double t; int d;
+                if (!rowTime(l, t, d))
+                {
+                    if (takeHead && inHead) out.append(l);
+                    continue;
+                }
+                inHead = false;
+                if (t > tFrom + tol && t <= t0 + tol)
+                {
+                    out.append(l);
+                    tEnd = max(tEnd, t);
+                    ++nRows;
+                }
+            }
+            tFrom = tEnd;
+        }
+        writeLines(Fp, out);
+        keptOutputs_.append(F);
+        Info<< "MoorDyn restart: " << nRows << " rows (t <= " << t0
+            << ") of " << F << " kept in " << Fp << endl;
+    }
+}
+
+
+void Foam::sixDoFRigidBodyMotionRestraints::moorDynR2::mergeOutputs() const
+{
+    for (const fileName& F : keptOutputs_)
+    {
+        const fileName Fp(F + ".prev");
+        DynamicList<std::string> out(readLines(Fp));
+        const DynamicList<std::string> lines(readLines(F));
+        const double tol = timeTol(lines);
+        label nNew = 0;
+        for (const std::string& l : lines)
+        {
+            double t; int d;
+            if (rowTime(l, t, d) && t > restartTime_ + tol)
+            {
+                out.append(l);
+                ++nNew;
+            }
+        }
+        writeLines(F, out);
+        rm(Fp);
+        Info<< "MoorDyn restart: " << F << " = rows up to t = " << restartTime_
+            << " + " << nNew << " new rows" << endl;
+    }
+    keptOutputs_.clear();
+}
+
+
+Foam::label Foam::sixDoFRigidBodyMotionRestraints::moorDynR2::countVTK
+(
+    const scalar t0
+) const
+{
+    // VTK times are time names: compare with the name of t0 (same rounding)
+    const double tn = std::strtod(Time::timeName(t0).c_str(), nullptr);
+    const double tol = 1e-12*(1 + std::fabs(tn));
+    label n = 0;
+    if (legacyVTK_)
+    {
+        // <prefix>_<n>.vtk, line 2: "MoorDyn v2 vtk output time=<time>"
+        while (true)
+        {
+            const fileName f
+            (
+                "Mooring/VTK/" + vtkPrefix_ + "_" + Foam::name(n + 1) + ".vtk"
+            );
+            if (!isFile(f)) break;
+            const DynamicList<std::string> l(readLines(f));
+            const auto p = l.size() > 1 ? l[1].find("time=") : std::string::npos;
+            double t; int d;
+            if (p == std::string::npos || !rowTime(l[1].substr(p + 5), t, d))
+            {
+                break;
+            }
+            if (t > tn + tol) break;
+            ++n;
+        }
+    }
+    else if (has_pvd())
+    {
+        // <DataSet timestep="<time>" ... file="<prefix>_<n>.vtm"/>
+        for (const std::string& l : readLines(name_pvd()))
+        {
+            const auto a = l.find("timestep=\"");
+            const auto b = l.find("file=\"" + vtkPrefix_ + "_");
+            if (a == std::string::npos || b == std::string::npos) continue;
+            double t; int d;
+            const std::string ts(l.substr(a + 10, l.find('"', a + 10) - a - 10));
+            if (!rowTime(ts, t, d) || t > tn + tol) continue;
+            const auto c = b + 7 + vtkPrefix_.size();
+            n = max(n, label(std::atol(l.substr(c, l.find('.', c) - c).c_str())));
+        }
+    }
+    return n;
 }
 
 
@@ -199,6 +417,9 @@ Foam::sixDoFRigidBodyMotionRestraints::moorDynR2::~moorDynR2()
         MoorDyn_Close(moordyn_);
         if (moordyn_backup_.data)
             free(moordyn_backup_.data);
+
+        // Restarted run: put the kept rows back in front of the new ones
+        mergeOutputs();
 
         vtk::seriesWriter writer;
 
@@ -229,10 +450,26 @@ void Foam::sixDoFRigidBodyMotionRestraints::moorDynR2::restrain
     
     const Time& time = motion.time();
 
+    if (!moordyn_)
+    {
+        // Restart: keep the output rows up to the start time and continue
+        // the VTK numbering before MoorDyn truncates/overwrites the files
+        if (time.startTimeIndex() > 0)
+        {
+            restartTime_ = time.startTime().value();
+            keepOutputs(restartTime_);
+            if (writeVTK_)
+            {
+                vtkCounter_ = countVTK(restartTime_);
+            }
+        }
+        createMoorDyn();
+    }
+
     scalar deltaT = time.deltaTValue();
     scalar t = time.value();
     scalar tprev = t - deltaT;
-    
+
     if (t == curTime_)
     {
         iteration_++;
