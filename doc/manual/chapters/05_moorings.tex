@@ -125,6 +125,9 @@ Keyword & Default & Meaning \\
 \kw{vtkStartTime}     & 0 & first time at which VTK files are written \\
 \kw{vtkLegacyFormat}  & (build-dependent) & legacy \file{.vtk} instead of XML VTK \\
 \kw{outerCorrector}   & 1 & outer-corrector iteration in which the VTK files are written \\
+\kw{allowStaticRestart} & \kw{false} & on a restart without a saved MoorDyn state, re-initialise the
+                                        lines from static equilibrium (warning) instead of stopping;
+                                        also accepted by \kw{moorDynR1} \\
 \bottomrule
 \end{tabularx}
 \caption{Options of the \kw{moorDynR2} restraint (FloatStepper and \kw{sixDoFRigidBodyMotion}).}
@@ -133,6 +136,19 @@ Keyword & Default & Meaning \\
 In \kw{BODY} mode, the MoorDyn input file must define exactly one coupled body; its position is
 taken from the rigid-body motion. In \kw{POINT} mode, the number of entries in
 \kw{refAttachmentPt} must equal the number of coupled points in the MoorDyn input file.
+
+\section{Restart}
+At every write time, \kw{moorDynR2} saves the complete MoorDyn state (line nodes, coupled body,
+time integrator) with the time folder, in
+\file{<time>/uniform/moorDyn/<restraint name>.dat} (\file{processor0/<time>/...} in parallel;
+\file{reconstructPar} copies it to the case folder and \file{decomposePar} links to it). When the
+solver restarts from a written time, the lines continue from this state instead of a new static
+equilibrium, so the mooring force of the first step equals that of the continuous run. This holds
+for \file{waveIsoFoam}, \file{waveIsoFoamSWENSE} and \file{floatStepperWaveIsoFoam}. A restart from
+a time folder without this file (for example, one written before this feature) stops with an error,
+unless \kw{allowStaticRestart true} is set. MoorDyn v1 cannot save its state, so \kw{moorDynR1}
+always stops on a restart unless \kw{allowStaticRestart true} is set; its lines then restart from
+static equilibrium.
 
 \section{Output}
 MoorDyn writes the line tensions and node positions to the \file{Mooring/} folder (MoorDyn v1:
