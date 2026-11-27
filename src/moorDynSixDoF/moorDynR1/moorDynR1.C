@@ -154,6 +154,24 @@ void Foam::sixDoFRigidBodyMotionRestraints::moorDynR1::restrain
         Info<< "Initial CoM for Mooring initialisation : " << initialCoM
             << endl;
 
+        if (motion.time().startTimeIndex() > 0)
+        {
+            if (!allowStaticRestart_)
+            {
+                FatalErrorInFunction
+                    << "Restart at t = " << motion.time().startTime().value()
+                    << ": MoorDyn v1 cannot save or load its state, so the"
+                    << " lines would start again from static equilibrium."
+                    << " Use moorDynR2 for an exact restart, or set"
+                    << " allowStaticRestart true in restraint " << name()
+                    << " to accept this." << exit(FatalError);
+            }
+            WarningInFunction
+                << "Restart at t = " << motion.time().startTime().value()
+                << ": MoorDyn v1 lines re-initialised from static equilibrium"
+                << " (v1 has no state save)" << endl;
+        }
+
         LinesInit(X, XD);
         Info<< "MoorDyn module initialized!" << endl;
         initialized_ = true;
@@ -191,6 +209,9 @@ bool Foam::sixDoFRigidBodyMotionRestraints::moorDynR1::read
 )
 {
     sixDoFRigidBodyMotionRestraint::read(sDoFRBMRDict);
+
+    allowStaticRestart_ =
+        sDoFRBMRCoeffs_.getOrDefault<Switch>("allowStaticRestart", false);
 
     return true;
 }

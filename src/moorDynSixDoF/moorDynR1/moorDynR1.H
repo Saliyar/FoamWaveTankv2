@@ -87,6 +87,10 @@ class moorDynR1
         mutable vector cachedForce_;
         mutable vector cachedMoment_;
 
+        //- Allow a restart (MoorDyn v1 cannot save its state, so the lines
+        //  restart from static equilibrium); stop otherwise (default)
+        bool allowStaticRestart_;
+
 
 public:
 
