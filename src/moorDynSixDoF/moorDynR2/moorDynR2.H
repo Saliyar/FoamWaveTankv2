@@ -115,7 +115,11 @@ class moorDynR2
         
         //- Outer corrector, times mooring states updated each time step
         label outerCorrector_;
-        
+
+        //- On a restart with no saved MoorDyn state, re-initialise the lines
+        //  from static equilibrium (warning) instead of stopping (default)
+        bool allowStaticRestart_;
+
         // The MoorDyn system instance
         MoorDyn moordyn_;
         
@@ -168,6 +172,20 @@ class moorDynR2
                 FatalError << "MoorDyn system cannot be restored"
                            << exit(FatalError);
             }
+        }
+
+        //- MoorDyn state file (MoorDyn_Save) of a time directory:
+        //  <root>/<time>/uniform/moorDyn/<restraint name>.dat
+        //  It is written to time.path() (processor0 in parallel, next to the
+        //  sixDoF/floater state); reconstructPar copies it to the case, and
+        //  decomposePar leaves it there (read from time.globalPath())
+        inline fileName stateFile
+        (
+            const fileName& root,
+            const word& timeName
+        ) const
+        {
+            return root/timeName/"uniform"/"moorDyn"/(name() + ".dat");
         }
 
         //- PVD file name

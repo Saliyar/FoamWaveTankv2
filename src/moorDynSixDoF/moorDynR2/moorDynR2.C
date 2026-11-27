@@ -286,19 +286,63 @@ void Foam::sixDoFRigidBodyMotionRestraints::moorDynR2::restrain
 
     if (!initialized_)
     {
-        moordyn_err = MoorDyn_Init(moordyn_, X, XD);
-        if (moordyn_err != MOORDYN_SUCCESS) {
-            FatalError << "MoorDyn could not be initialized"
-                       << exit(FatalError);
+        // Restart: load the MoorDyn state saved at the start time instead of
+        // solving a new static equilibrium (which drops the line dynamics)
+        const word startName(time.timeName(time.startTime().value()));
+        fileName restartFile(stateFile(time.path(), startName));
+        if (!isFile(restartFile) && isFile(stateFile(time.globalPath(), startName)))
+        {
+            restartFile = stateFile(time.globalPath(), startName);
         }
-        Info<< "MoorDyn module initialized!" << endl;
+
+        if (isFile(restartFile))
+        {
+            moordyn_err = MoorDyn_Init_NoIC(moordyn_, X, XD);
+            if (moordyn_err != MOORDYN_SUCCESS) {
+                FatalError << "MoorDyn could not be initialized"
+                           << exit(FatalError);
+            }
+            moordyn_err = MoorDyn_Load(moordyn_, restartFile.c_str());
+            if (moordyn_err != MOORDYN_SUCCESS) {
+                FatalError << "MoorDyn state cannot be loaded from "
+                           << restartFile << exit(FatalError);
+            }
+            Info<< "MoorDyn module restarted from " << restartFile << endl;
+        }
+        else
+        {
+            if (time.startTimeIndex() > 0)
+            {
+                if (!allowStaticRestart_)
+                {
+                    FatalErrorInFunction
+                        << "Restart at t = " << time.startTime().value()
+                        << " but no MoorDyn state " << restartFile
+                        << " (it is written at every write time). Set"
+                        << " allowStaticRestart true in restraint " << name()
+                        << " to re-initialise the lines from static"
+                        << " equilibrium instead." << exit(FatalError);
+                }
+                WarningInFunction
+                    << "Restart at t = " << time.startTime().value()
+                    << " without MoorDyn state " << restartFile
+                    << ": lines re-initialised from static equilibrium"
+                    << endl;
+            }
+            moordyn_err = MoorDyn_Init(moordyn_, X, XD);
+            if (moordyn_err != MOORDYN_SUCCESS) {
+                FatalError << "MoorDyn could not be initialized"
+                           << exit(FatalError);
+            }
+            Info<< "MoorDyn module initialized!" << endl;
+            if (writeVTK_ && time.startTimeIndex() == 0) {
+                autoPtr<Time> dummy_t = Time::New();
+                dummy_t->setTime(0.0, 0);
+                writeVTK(dummy_t.ref());
+            }
+        }
         initialized_ = true;
         save_mooring(tprev);
-        if (writeVTK_) {
-            autoPtr<Time> dummy_t = Time::New();
-            dummy_t->setTime(0.0, 0);
-            writeVTK(dummy_t.ref());
-        }
 
         curTime_ = t;
         iteration_ = 1;
@@ -319,6 +363,20 @@ void Foam::sixDoFRigidBodyMotionRestraints::moorDynR2::restrain
         FatalErrorInFunction
             << "Error computing MoorDyn step " << tprev
             << "s -> " << tprev + deltaT << "s" << exit(FatalError);
+    }
+
+    // Save the MoorDyn state with the time directory. Every call of a write
+    // step overwrites it, so the file holds the state after the last call,
+    // which is the state the next time step starts from.
+    if (time.writeTime())
+    {
+        const fileName f(stateFile(time.path(), time.timeName()));
+        mkDir(f.path());
+        moordyn_err = MoorDyn_Save(moordyn_, f.c_str());
+        if (moordyn_err != MOORDYN_SUCCESS) {
+            FatalError << "MoorDyn state cannot be saved to " << f
+                       << exit(FatalError);
+        }
     }
 
     if (couplingMode_ == word("BODY"))
@@ -386,6 +444,9 @@ bool Foam::sixDoFRigidBodyMotionRestraints::moorDynR2::read
         sDoFRBMRCoeffs_.readEntry("refAttachmentPt", refAttachmentPt_);
     }
 
+    allowStaticRestart_ =
+        sDoFRBMRCoeffs_.getOrDefault<Switch>("allowStaticRestart", false);
+
     writeVTK_ = sDoFRBMRCoeffs_.getOrDefault<Switch>("writeMooringVTK", false);
     if (writeVTK_)
     {
@@ -416,6 +477,7 @@ void Foam::sixDoFRigidBodyMotionRestraints::moorDynR2::write
     if (couplingMode_ == word("POINT"))
         os.writeEntry("refAttachmentPt", refAttachmentPt_);
     
+    os.writeEntry("allowStaticRestart", allowStaticRestart_);
     os.writeEntry("writeMooringVTK", writeVTK_);
     if (writeVTK_)
     {
