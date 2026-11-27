@@ -150,6 +150,14 @@ unless \kw{allowStaticRestart true} is set. MoorDyn v1 cannot save its state, so
 always stops on a restart unless \kw{allowStaticRestart true} is set; its lines then restart from
 static equilibrium.
 
+MoorDyn rewrites its \file{.out} files when it starts. On a restart, \kw{moorDynR2} therefore
+first keeps their rows up to the restart time in \file{<file>.out.prev}; at the end of the run
+they are merged back in front of the new rows and the \file{.prev} file is removed, so each
+\file{.out} file covers the whole simulation. If a restarted run stops early (crash, wall-time
+limit), the \file{.prev} files stay and the next restart merges them. Rows of the old run after the
+restart time are dropped. VTK file numbering continues after the last frame before the restart.
+The MoorDyn log file (\file{.log}) is started again.
+
 \section{Output}
 MoorDyn writes the line tensions and node positions to the \file{Mooring/} folder (MoorDyn v1:
 \file{Lines.out} and \file{Line<n>.out}; MoorDyn v2: as set in its input file). With
